@@ -22,8 +22,8 @@ class TipoDocumentoSeeder extends Seeder
                     ['key' => 'fecha_titulo', 'label' => 'Fecha Título', 'type' => 'date']
                 ],
                 'config_archivos' => [
-                    ['id' => 'diploma', 'label' => 'Diploma Académico', 'required' => true],
-                    ['id' => 'titulo', 'label' => 'Título en Provisión Nacional', 'required' => true]
+                    ['id' => 'diploma', 'label' => 'Diploma Académico', 'required' => true, 'after_campo' => 'fecha_diploma'],
+                    ['id' => 'titulo', 'label' => 'Título en Provisión Nacional', 'required' => true, 'after_campo' => 'fecha_titulo']
                 ],
                 'permite_multiples' => true,
                 'orden' => 1
