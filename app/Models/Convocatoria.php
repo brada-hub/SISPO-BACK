@@ -37,4 +37,9 @@ class Convocatoria extends Model
                     ->withPivot(['obligatorio', 'orden'])
                     ->orderByPivot('orden');
     }
+
+    public function postulaciones()
+    {
+        return $this->hasManyThrough(Postulacion::class, Oferta::class);
+    }
 }

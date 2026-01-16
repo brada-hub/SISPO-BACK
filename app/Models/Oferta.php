@@ -27,4 +27,9 @@ class Oferta extends Model
     {
         return $this->belongsTo(Cargo::class);
     }
+
+    public function postulaciones()
+    {
+        return $this->hasMany(Postulacion::class);
+    }
 }

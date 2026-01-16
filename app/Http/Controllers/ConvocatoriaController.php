@@ -113,4 +113,11 @@ class ConvocatoriaController extends Controller
         $convocatoria->delete();
         return response()->noContent();
     }
+
+    public function convocatoriasConPostulantes()
+    {
+        return Convocatoria::withCount('postulaciones')
+            ->orderBy('fecha_inicio', 'desc')
+            ->get();
+    }
 }

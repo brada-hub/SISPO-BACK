@@ -7,11 +7,17 @@ use Illuminate\Http\Request;
 
 class PostulacionController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede'])
-            ->orderBy('id', 'desc')
-            ->get();
+        $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede']);
+
+        if ($request->has('convocatoria_id')) {
+            $query->whereHas('oferta', function($q) use ($request) {
+                $q->where('convocatoria_id', $request->convocatoria_id);
+            });
+        }
+
+        return $query->orderBy('id', 'desc')->get();
     }
 
     public function show($id)

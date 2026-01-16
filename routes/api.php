@@ -42,6 +42,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('tipos-documento', \App\Http\Controllers\TipoDocumentoController::class);
     Route::apiResource('convocatorias', \App\Http\Controllers\ConvocatoriaController::class);
 
+    // Convocatorias with postulations count
+    Route::get('admin/convocatorias-con-postulantes', [App\Http\Controllers\ConvocatoriaController::class, 'convocatoriasConPostulantes']);
+
     // Custom Postulaciones routes
     Route::put('postulaciones/{id}/estado', [PostulacionController::class, 'updateStatus']);
     Route::get('postulaciones/{id}/expediente', [PostulacionController::class, 'expediente']);
