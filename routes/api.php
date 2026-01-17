@@ -52,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('postulaciones/export/{convocatoriaId?}', [PostulacionController::class, 'export']);
     Route::apiResource('postulaciones', \App\Http\Controllers\PostulacionController::class);
 
+    Route::post('usuarios/cambiar-password', [\App\Http\Controllers\UserController::class, 'changePassword']);
     Route::apiResource('usuarios', \App\Http\Controllers\UserController::class);
     Route::apiResource('roles', \App\Http\Controllers\RolController::class);
 });
