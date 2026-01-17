@@ -107,10 +107,10 @@ class PortalController extends Controller
             'ref_laboral_detalle' => 'nullable|string|max:500',
 
             // Files
-            'foto_perfil' => 'nullable|image|max:5120',
-            'ci_archivo' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-            'cv_pdf' => 'nullable|file|mimes:pdf|max:10240',
-            'carta_postulacion' => 'nullable|file|mimes:pdf|max:5120',
+            'foto_perfil' => 'nullable|image|max:2048',
+            'ci_archivo' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:2048',
+            'cv_pdf' => 'nullable|file|mimes:pdf|max:2048',
+            'carta_postulacion' => 'nullable|file|mimes:pdf|max:2048',
 
             // Dynamic merits
             'meritos' => 'nullable|array',
@@ -127,11 +127,10 @@ class PortalController extends Controller
                     'ci_expedido' => $validated['ci_expedido'] ?? null,
                     'nombres' => $validated['nombres'],
                     'apellidos' => $validated['apellidos'],
-                    'genero' => $validated['genero'] ?? null,
-                    'nacionalidad' => $validated['nacionalidad'] ?? 'Boliviana',
-                    'direccion_domicilio' => $validated['direccion_domicilio'] ?? null,
-                    'email' => $validated['email'] ?? null,
-                    'celular' => $validated['celular'] ?? null,
+                    'nacionalidad' => $request->input('nacionalidad', 'Boliviana'),
+                    'direccion_domicilio' => $request->input('direccion_domicilio'),
+                    'email' => $request->input('email'),
+                    'celular' => $request->input('celular'),
                     'ref_personal_celular' => $request->input('ref_personal_celular'),
                     'ref_personal_parentesco' => $request->input('ref_personal_parentesco'),
                     'ref_laboral_celular' => $request->input('ref_laboral_celular'),

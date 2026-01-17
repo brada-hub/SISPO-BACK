@@ -17,13 +17,13 @@ class DatabaseSeeder extends Seeder
     {
         // 1. Roles
         $adminRol = Rol::updateOrCreate(
-            ['nombre' => 'Administrador'],
-            ['descripcion' => 'Acceso total al sistema', 'activo' => true]
+            ['nombre' => 'ADMINISTRADOR'],
+            ['descripcion' => 'ACCESO TOTAL AL SISTEMA', 'activo' => true]
         );
 
         $userRol = Rol::updateOrCreate(
-            ['nombre' => 'Usuario'],
-            ['descripcion' => 'Acceso limitado', 'activo' => true]
+            ['nombre' => 'USUARIO'],
+            ['descripcion' => 'ACCESO LIMITADO', 'activo' => true]
         );
 
         // 2. Usuario Administrador
@@ -41,15 +41,15 @@ class DatabaseSeeder extends Seeder
 
         // 3. Sedes
         $sedes = [
-            ['nombre' => 'La Paz', 'departamento' => 'La Paz', 'sigla' => 'LPZ'],
-            ['nombre' => 'El Alto', 'departamento' => 'La Paz', 'sigla' => 'ALT'],
-            ['nombre' => 'Cochabamba', 'departamento' => 'Cochabamba', 'sigla' => 'COC'],
-            ['nombre' => 'Ivirgarzama', 'departamento' => 'Cochabamba', 'sigla' => 'IVI'],
-            ['nombre' => 'Guayaramerin', 'departamento' => 'Beni', 'sigla' => 'GUA'],
-            ['nombre' => 'Santa Cruz', 'departamento' => 'Santa Cruz', 'sigla' => 'SCZ'],
-            ['nombre' => 'Puerto Quijarro', 'departamento' => 'Santa Cruz', 'sigla' => 'PUE-QUI'],
-            ['nombre' => 'Cobija', 'departamento' => 'Pando', 'sigla' => 'COB'],
-            ['nombre' => 'Bolivia', 'departamento' => 'Nacional', 'sigla' => 'BOL'],
+            ['nombre' => 'LA PAZ', 'departamento' => 'LA PAZ', 'sigla' => 'LPZ'],
+            ['nombre' => 'EL ALTO', 'departamento' => 'LA PAZ', 'sigla' => 'ALT'],
+            ['nombre' => 'COCHABAMBA', 'departamento' => 'COCHABAMBA', 'sigla' => 'COC'],
+            ['nombre' => 'IVIRGARZAMA', 'departamento' => 'COCHABAMBA', 'sigla' => 'IVI'],
+            ['nombre' => 'GUAYARAMERIN', 'departamento' => 'BENI', 'sigla' => 'GUA'],
+            ['nombre' => 'SANTA CRUZ', 'departamento' => 'SANTA CRUZ', 'sigla' => 'SCZ'],
+            ['nombre' => 'PUERTO QUIJARRO', 'departamento' => 'SANTA CRUZ', 'sigla' => 'PUE-QUI'],
+            ['nombre' => 'COBIJA', 'departamento' => 'PANDO', 'sigla' => 'COB'],
+            ['nombre' => 'BOLIVIA', 'departamento' => 'NACIONAL', 'sigla' => 'BOL'],
         ];
 
         foreach ($sedes as $sede) {
@@ -58,16 +58,16 @@ class DatabaseSeeder extends Seeder
 
         // 4. Cargos (Inventados)
         $cargos = [
-            ['nombre' => 'Docente Tiempo Horario', 'sigla' => 'DOC-HOR'],
-            ['nombre' => 'Docente Tiempo Completo', 'sigla' => 'DOC-COM'],
-            ['nombre' => 'Director de Carrera', 'sigla' => 'DIR-CAR'],
-            ['nombre' => 'Secretaria Académica', 'sigla' => 'SEC-ACA'],
-            ['nombre' => 'Auxiliar de Laboratorio', 'sigla' => 'AUX-LAB'],
-            ['nombre' => 'Coordinador de Investigación', 'sigla' => 'COO-INV'],
-            ['nombre' => 'Asistente Administrativo', 'sigla' => 'ASI-ADM'],
-            ['nombre' => 'Encargado de Sistemas', 'sigla' => 'ENC-SIS'],
-            ['nombre' => 'Contador', 'sigla' => 'CON'],
-            ['nombre' => 'Portero/Seguridad', 'sigla' => 'POR-SEG'],
+            ['nombre' => 'DOCENTE TIEMPO HORARIO', 'sigla' => 'DOC-HOR'],
+            ['nombre' => 'DOCENTE TIEMPO COMPLETO', 'sigla' => 'DOC-COM'],
+            ['nombre' => 'DIRECTOR DE CARRERA', 'sigla' => 'DIR-CAR'],
+            ['nombre' => 'SECRETARIA ACADÉMICA', 'sigla' => 'SEC-ACA'],
+            ['nombre' => 'AUXILIAR DE LABORATORIO', 'sigla' => 'AUX-LAB'],
+            ['nombre' => 'COORDINADOR DE INVESTIGACIÓN', 'sigla' => 'COO-INV'],
+            ['nombre' => 'ASISTENTE ADMINISTRATIVO', 'sigla' => 'ASI-ADM'],
+            ['nombre' => 'ENCARGADO DE SISTEMAS', 'sigla' => 'ENC-SIS'],
+            ['nombre' => 'CONTADOR', 'sigla' => 'CON'],
+            ['nombre' => 'PORTERO/SEGURIDAD', 'sigla' => 'POR-SEG'],
         ];
 
         foreach ($cargos as $cargo) {

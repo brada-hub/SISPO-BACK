@@ -12,8 +12,6 @@ class Postulante extends Model
         'ci_archivo_path',
         'nombres',
         'apellidos',
-        'fecha_nacimiento',
-        'genero',
         'nacionalidad',
         'direccion_domicilio',
         'email',

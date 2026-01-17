@@ -11,116 +11,116 @@ class TipoDocumentoSeeder extends Seeder
     {
         $tipos = [
             [
-                'nombre' => 'Formación Académica',
-                'descripcion' => 'Títulos de pregrado',
-                'categoria' => 'Formación',
+                'nombre' => 'FORMACIÓN ACADÉMICA',
+                'descripcion' => 'TÍTULOS DE PREGRADO',
+                'categoria' => 'FORMACIÓN',
                 'campos' => [
-                    ['key' => 'nivel', 'label' => 'Nivel Académico', 'type' => 'select', 'options' => ['Licenciatura', 'Técnico Medio', 'Técnico Superior', 'Secretariado', 'Auxiliar', 'Postgrado', 'Otros']],
-                    ['key' => 'universidad', 'label' => 'Universidad / Institución', 'type' => 'text'],
-                    ['key' => 'profesion', 'label' => 'Carrera / Profesión', 'type' => 'text'],
-                    ['key' => 'fecha_diploma', 'label' => 'Fecha Diploma', 'type' => 'date'],
-                    ['key' => 'fecha_titulo', 'label' => 'Fecha Título', 'type' => 'date']
+                    ['key' => 'nivel', 'label' => 'NIVEL ACADÉMICO', 'type' => 'select', 'options' => ['LICENCIATURA', 'TÉCNICO MEDIO', 'TÉCNICO SUPERIOR', 'SECRETARIADO', 'AUXILIAR', 'POSTGRADO', 'OTROS']],
+                    ['key' => 'universidad', 'label' => 'UNIVERSIDAD / INSTITUCIÓN', 'type' => 'text'],
+                    ['key' => 'profesion', 'label' => 'CARRERA / PROFESIÓN', 'type' => 'text'],
+                    ['key' => 'fecha_diploma', 'label' => 'FECHA DIPLOMA', 'type' => 'date'],
+                    ['key' => 'fecha_titulo', 'label' => 'FECHA TÍTULO', 'type' => 'date']
                 ],
                 'config_archivos' => [
-                    ['id' => 'diploma', 'label' => 'Diploma Académico', 'required' => true, 'after_campo' => 'fecha_diploma'],
-                    ['id' => 'titulo', 'label' => 'Título en Provisión Nacional', 'required' => true, 'after_campo' => 'fecha_titulo']
+                    ['id' => 'diploma', 'label' => 'DIPLOMA ACADÉMICO', 'required' => true, 'after_campo' => 'fecha_diploma'],
+                    ['id' => 'titulo', 'label' => 'TÍTULO EN PROVISIÓN NACIONAL', 'required' => true, 'after_campo' => 'fecha_titulo']
                 ],
                 'permite_multiples' => true,
                 'orden' => 1
             ],
             [
-                'nombre' => 'Formación en Posgrado',
-                'descripcion' => 'Diplomados, Maestrías, Doctorados',
-                'categoria' => 'Formación',
+                'nombre' => 'FORMACIÓN EN POSGRADO',
+                'descripcion' => 'DIPLOMADOS, MAESTRÍAS, DOCTORADOS',
+                'categoria' => 'FORMACIÓN',
                 'campos' => [
-                    ['key' => 'tipo_posgrado', 'label' => 'Tipo de Posgrado', 'type' => 'select', 'options' => ['Diplomado', 'Especialidad', 'Maestría', 'Doctorado']],
-                    ['key' => 'nombre_programa', 'label' => 'Nombre del Programa', 'type' => 'text'],
-                    ['key' => 'fecha_certificacion', 'label' => 'Fecha de Certificación', 'type' => 'date'],
-                    ['key' => 'institucion', 'label' => 'Institución', 'type' => 'text']
+                    ['key' => 'tipo_posgrado', 'label' => 'TIPO DE POSGRADO', 'type' => 'select', 'options' => ['DIPLOMADO', 'ESPECIALIDAD', 'MAESTRÍA', 'DOCTORADO']],
+                    ['key' => 'nombre_programa', 'label' => 'NOMBRE DEL PROGRAMA', 'type' => 'text'],
+                    ['key' => 'fecha_certificacion', 'label' => 'FECHA DE CERTIFICACIÓN', 'type' => 'date'],
+                    ['key' => 'institucion', 'label' => 'INSTITUCIÓN', 'type' => 'text']
                 ],
                 'config_archivos' => [
-                    ['id' => 'certificado', 'label' => 'Certificado de Posgrado', 'required' => true]
+                    ['id' => 'certificado', 'label' => 'CERTIFICADO DE POSGRADO', 'required' => true]
                 ],
                 'permite_multiples' => true,
                 'orden' => 2
             ],
             [
-                'nombre' => 'Experiencia Docencia',
-                'descripcion' => 'Experiencia como docente universitario',
-                'categoria' => 'Experiencia',
+                'nombre' => 'EXPERIENCIA DOCENCIA',
+                'descripcion' => 'EXPERIENCIA COMO DOCENTE UNIVERSITARIO',
+                'categoria' => 'EXPERIENCIA',
                 'campos' => [
-                    ['key' => 'universidad', 'label' => 'Universidad', 'type' => 'text'],
-                    ['key' => 'carrera', 'label' => 'Carrera', 'type' => 'text'],
-                    ['key' => 'asignaturas', 'label' => 'Asignaturas', 'type' => 'textarea'],
-                    ['key' => 'gestion_periodo', 'label' => 'Gestión/Periodo', 'type' => 'text']
+                    ['key' => 'universidad', 'label' => 'UNIVERSIDAD', 'type' => 'text'],
+                    ['key' => 'carrera', 'label' => 'CARRERA', 'type' => 'text'],
+                    ['key' => 'asignaturas', 'label' => 'ASIGNATURAS', 'type' => 'textarea'],
+                    ['key' => 'gestion_periodo', 'label' => 'GESTIÓN/PERIODO', 'type' => 'text']
                 ],
                 'config_archivos' => [
-                    ['id' => 'respaldo', 'label' => 'Respaldo Documental (Contrato/Certificado)', 'required' => true]
+                    ['id' => 'respaldo', 'label' => 'RESPALDO DOCUMENTAL (CONTRATO/CERTIFICADO)', 'required' => true]
                 ],
                 'permite_multiples' => true,
                 'orden' => 3
             ],
             [
-                'nombre' => 'Experiencia Profesional',
-                'descripcion' => 'Experiencia laboral general',
-                'categoria' => 'Experiencia',
+                'nombre' => 'EXPERIENCIA PROFESIONAL',
+                'descripcion' => 'EXPERIENCIA LABORAL GENERAL',
+                'categoria' => 'EXPERIENCIA',
                 'campos' => [
-                    ['key' => 'cargo', 'label' => 'Cargo Desempeñado', 'type' => 'text'],
-                    ['key' => 'empresa', 'label' => 'Empresa/Institución', 'type' => 'text'],
-                    ['key' => 'fecha_inicio', 'label' => 'Fecha Inicio', 'type' => 'date'],
-                    ['key' => 'fecha_fin', 'label' => 'Fecha Fin', 'type' => 'date']
+                    ['key' => 'cargo', 'label' => 'CARGO DESEMPEÑADO', 'type' => 'text'],
+                    ['key' => 'empresa', 'label' => 'EMPRESA/INSTITUCIÓN', 'type' => 'text'],
+                    ['key' => 'fecha_inicio', 'label' => 'FECHA INICIO', 'type' => 'date'],
+                    ['key' => 'fecha_fin', 'label' => 'FECHA FIN', 'type' => 'date']
                 ],
                 'config_archivos' => [
-                    ['id' => 'certificado', 'label' => 'Certificado de Trabajo', 'required' => true]
+                    ['id' => 'certificado', 'label' => 'CERTIFICADO DE TRABAJO', 'required' => true]
                 ],
                 'permite_multiples' => true,
                 'orden' => 4
             ],
             [
-                'nombre' => 'Capacitacion',
-                'descripcion' => 'Cursos, talleres, seminarios',
-                'categoria' => 'Otros',
+                'nombre' => 'CAPACITACION',
+                'descripcion' => 'CURSOS, TALLERES, SEMINARIOS',
+                'categoria' => 'OTROS',
                 'campos' => [
-                    ['key' => 'nombre', 'label' => 'Nombre del Curso/Evento', 'type' => 'text'],
-                    ['key' => 'fecha', 'label' => 'Fecha', 'type' => 'date'],
-                    ['key' => 'institucion', 'label' => 'Institución Organizadora', 'type' => 'text'],
-                    ['key' => 'horas', 'label' => 'Carga Horaria', 'type' => 'number']
+                    ['key' => 'nombre', 'label' => 'NOMBRE DEL CURSO/EVENTO', 'type' => 'text'],
+                    ['key' => 'fecha', 'label' => 'FECHA', 'type' => 'date'],
+                    ['key' => 'institucion', 'label' => 'INSTITUCIÓN ORGANIZADORA', 'type' => 'text'],
+                    ['key' => 'horas', 'label' => 'CARGA HORARIA', 'type' => 'number']
                 ],
                 'config_archivos' => [
-                    ['id' => 'certificado', 'label' => 'Certificado de Asistencia/Aprobación', 'required' => true]
+                    ['id' => 'certificado', 'label' => 'CERTIFICADO DE ASISTENCIA/APROBACIÓN', 'required' => true]
                 ],
                 'permite_multiples' => true,
                 'orden' => 5
             ],
             [
-                'nombre' => 'Producción Intelectual',
-                'descripcion' => 'Libros, artículos, investigaciones',
-                'categoria' => 'Intelectual',
+                'nombre' => 'PRODUCCIÓN INTELECTUAL',
+                'descripcion' => 'LIBROS, ARTÍCULOS, INVESTIGACIONES',
+                'categoria' => 'INTELECTUAL',
                 'campos' => [
-                    ['key' => 'tipo', 'label' => 'Tipo de Producción', 'type' => 'select', 'options' => ['Libro', 'Artículo Científico', 'Ensayo', 'Otro']],
-                    ['key' => 'titulo', 'label' => 'Título', 'type' => 'text'],
-                    ['key' => 'fecha', 'label' => 'Fecha de Publicación', 'type' => 'date'],
-                    ['key' => 'editorial', 'label' => 'Editorial/Revista', 'type' => 'text'],
-                    ['key' => 'lugar', 'label' => 'Lugar', 'type' => 'text']
+                    ['key' => 'tipo', 'label' => 'TIPO DE PRODUCCIÓN', 'type' => 'select', 'options' => ['LIBRO', 'ARTÍCULO CIENTÍFICO', 'ENSAYO', 'OTRO']],
+                    ['key' => 'titulo', 'label' => 'TÍTULO', 'type' => 'text'],
+                    ['key' => 'fecha', 'label' => 'FECHA DE PUBLICACIÓN', 'type' => 'date'],
+                    ['key' => 'editorial', 'label' => 'EDITORIAL/REVISTA', 'type' => 'text'],
+                    ['key' => 'lugar', 'label' => 'LUGAR', 'type' => 'text']
                 ],
                 'config_archivos' => [
-                    ['id' => 'evidencia', 'label' => 'Evidencia (Tapa, índice, artículo)', 'required' => true]
+                    ['id' => 'evidencia', 'label' => 'EVIDENCIA (TAPA, ÍNDICE, ARTÍCULO)', 'required' => true]
                 ],
                 'permite_multiples' => true,
                 'orden' => 6
             ],
             [
-                'nombre' => 'Reconocimiento',
-                'descripcion' => 'Premios, distinciones',
-                'categoria' => 'Otros',
+                'nombre' => 'RECONOCIMIENTO',
+                'descripcion' => 'PREMIOS, DISTINCIONES',
+                'categoria' => 'OTROS',
                 'campos' => [
-                    ['key' => 'titulo', 'label' => 'Título del Reconocimiento', 'type' => 'text'],
-                    ['key' => 'fecha', 'label' => 'Fecha', 'type' => 'date'],
-                    ['key' => 'institucion', 'label' => 'Institución Otorgante', 'type' => 'text'],
-                    ['key' => 'lugar', 'label' => 'Lugar', 'type' => 'text']
+                    ['key' => 'titulo', 'label' => 'TÍTULO DEL RECONOCIMIENTO', 'type' => 'text'],
+                    ['key' => 'fecha', 'label' => 'FECHA', 'type' => 'date'],
+                    ['key' => 'institucion', 'label' => 'INSTITUCIÓN OTORGANTE', 'type' => 'text'],
+                    ['key' => 'lugar', 'label' => 'LUGAR', 'type' => 'text']
                 ],
                 'config_archivos' => [
-                    ['id' => 'reconocimiento', 'label' => 'Documento de Reconocimiento', 'required' => true]
+                    ['id' => 'reconocimiento', 'label' => 'DOCUMENTO DE RECONOCIMIENTO', 'required' => true]
                 ],
                 'permite_multiples' => true,
                 'orden' => 7
@@ -128,7 +128,7 @@ class TipoDocumentoSeeder extends Seeder
         ];
 
         foreach ($tipos as $tipo) {
-            TipoDocumento::create($tipo);
+            TipoDocumento::updateOrCreate(['nombre' => $tipo['nombre']], $tipo);
         }
     }
 }
