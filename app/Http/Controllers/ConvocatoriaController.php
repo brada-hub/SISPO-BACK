@@ -31,11 +31,13 @@ class ConvocatoriaController extends Controller
     {
         $validated = $request->validate([
             'titulo' => 'required|string|max:255',
+            'codigo_interno' => 'nullable|string|max:50|unique:convocatorias,codigo_interno',
             'descripcion' => 'nullable|string',
             'fecha_inicio' => 'required|date',
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
             'hora_limite' => 'nullable',
             'config_requisitos_ids' => 'nullable|array',
+            'requisitos_afiche' => 'nullable|array',
             'ofertas' => 'required|array|min:1',
             'ofertas.*.sede_id' => 'required|exists:sedes,id',
             'ofertas.*.cargo_id' => 'required|exists:cargos,id',
@@ -44,11 +46,13 @@ class ConvocatoriaController extends Controller
         return DB::transaction(function () use ($validated) {
             $convocatoria = Convocatoria::create([
                 'titulo' => $validated['titulo'],
+                'codigo_interno' => $validated['codigo_interno'],
                 'descripcion' => $validated['descripcion'],
                 'fecha_inicio' => $validated['fecha_inicio'],
                 'fecha_cierre' => $validated['fecha_cierre'],
                 'hora_limite' => $validated['hora_limite'],
                 'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
+                'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
             ]);
 
             foreach ($validated['ofertas'] as $o) {
@@ -73,11 +77,13 @@ class ConvocatoriaController extends Controller
     {
         $validated = $request->validate([
             'titulo' => 'required|string|max:255',
+            'codigo_interno' => 'nullable|string|max:50|unique:convocatorias,codigo_interno,'.$convocatoria->id,
             'descripcion' => 'nullable|string',
             'fecha_inicio' => 'required|date',
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
             'hora_limite' => 'nullable',
             'config_requisitos_ids' => 'nullable|array',
+            'requisitos_afiche' => 'nullable|array',
             'ofertas' => 'required|array|min:1',
             'ofertas.*.sede_id' => 'required|exists:sedes,id',
             'ofertas.*.cargo_id' => 'required|exists:cargos,id',
@@ -86,11 +92,13 @@ class ConvocatoriaController extends Controller
         return DB::transaction(function () use ($validated, $convocatoria) {
             $convocatoria->update([
                 'titulo' => $validated['titulo'],
+                'codigo_interno' => $validated['codigo_interno'],
                 'descripcion' => $validated['descripcion'],
                 'fecha_inicio' => $validated['fecha_inicio'],
                 'fecha_cierre' => $validated['fecha_cierre'],
                 'hora_limite' => $validated['hora_limite'],
                 'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
+                'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
             ]);
 
             // Sync Ofertas (delete all and recreating is simplest for this scope)

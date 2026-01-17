@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user()->load('rol'); // Add load('rol') for frontend check
     });
 
+    Route::get('dashboard/stats', [\App\Http\Controllers\DashboardController::class, 'getStats']);
     Route::apiResource('sedes', \App\Http\Controllers\SedeController::class);
     Route::apiResource('cargos', \App\Http\Controllers\CargoController::class);
     Route::apiResource('tipos-documento', \App\Http\Controllers\TipoDocumentoController::class);

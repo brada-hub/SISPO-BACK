@@ -8,15 +8,18 @@ class Convocatoria extends Model
 {
     protected $fillable = [
         'titulo',
+        'codigo_interno',
         'descripcion',
         'fecha_inicio',
         'fecha_cierre',
         'hora_limite',
         'config_requisitos_ids',
+        'requisitos_afiche',
     ];
 
     protected $casts = [
         'config_requisitos_ids' => 'array',
+        'requisitos_afiche' => 'array',
         'fecha_inicio' => 'date',
         'fecha_cierre' => 'date',
     ];

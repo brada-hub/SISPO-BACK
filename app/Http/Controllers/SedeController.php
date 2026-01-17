@@ -16,6 +16,8 @@ class SedeController extends Controller
     {
         $validated = $request->validate([
             'nombre' => 'required|string|max:255',
+            'departamento' => 'nullable|string|max:255',
+            'sigla' => 'nullable|string|max:10',
         ]);
 
         return Sede::create($validated);
@@ -30,6 +32,8 @@ class SedeController extends Controller
     {
         $validated = $request->validate([
             'nombre' => 'required|string|max:255',
+            'departamento' => 'nullable|string|max:255',
+            'sigla' => 'nullable|string|max:10',
         ]);
 
         $sede->update($validated);

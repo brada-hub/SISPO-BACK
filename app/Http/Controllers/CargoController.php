@@ -16,6 +16,7 @@ class CargoController extends Controller
     {
         $validated = $request->validate([
             'nombre' => 'required|string|max:255',
+            'sigla' => 'nullable|string|max:20',
         ]);
 
         return Cargo::create($validated);
@@ -30,6 +31,7 @@ class CargoController extends Controller
     {
         $validated = $request->validate([
             'nombre' => 'required|string|max:255',
+            'sigla' => 'nullable|string|max:20',
         ]);
 
         $cargo->update($validated);

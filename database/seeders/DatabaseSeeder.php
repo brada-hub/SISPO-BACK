@@ -41,15 +41,15 @@ class DatabaseSeeder extends Seeder
 
         // 3. Sedes
         $sedes = [
-            ['nombre' => 'La Paz', 'departamento' => 'La Paz'],
-            ['nombre' => 'El Alto', 'departamento' => 'La Paz'],
-            ['nombre' => 'Cochabamba', 'departamento' => 'Cochabamba'],
-            ['nombre' => 'Ivirgarzama', 'departamento' => 'Cochabamba'],
-            ['nombre' => 'Guayaramerin', 'departamento' => 'Beni'],
-            ['nombre' => 'Santa Cruz', 'departamento' => 'Santa Cruz'],
-            ['nombre' => 'Puerto Quijarro', 'departamento' => 'Santa Cruz'],
-            ['nombre' => 'Cobija', 'departamento' => 'Pando'],
-            ['nombre' => 'Bolivia', 'departamento' => 'Nacional'],
+            ['nombre' => 'La Paz', 'departamento' => 'La Paz', 'sigla' => 'LPZ'],
+            ['nombre' => 'El Alto', 'departamento' => 'La Paz', 'sigla' => 'ALT'],
+            ['nombre' => 'Cochabamba', 'departamento' => 'Cochabamba', 'sigla' => 'COC'],
+            ['nombre' => 'Ivirgarzama', 'departamento' => 'Cochabamba', 'sigla' => 'IVI'],
+            ['nombre' => 'Guayaramerin', 'departamento' => 'Beni', 'sigla' => 'GUA'],
+            ['nombre' => 'Santa Cruz', 'departamento' => 'Santa Cruz', 'sigla' => 'SCZ'],
+            ['nombre' => 'Puerto Quijarro', 'departamento' => 'Santa Cruz', 'sigla' => 'PUE-QUI'],
+            ['nombre' => 'Cobija', 'departamento' => 'Pando', 'sigla' => 'COB'],
+            ['nombre' => 'Bolivia', 'departamento' => 'Nacional', 'sigla' => 'BOL'],
         ];
 
         foreach ($sedes as $sede) {
@@ -58,16 +58,16 @@ class DatabaseSeeder extends Seeder
 
         // 4. Cargos (Inventados)
         $cargos = [
-            ['nombre' => 'Docente Tiempo Horario'],
-            ['nombre' => 'Docente Tiempo Completo'],
-            ['nombre' => 'Director de Carrera'],
-            ['nombre' => 'Secretaria Académica'],
-            ['nombre' => 'Auxiliar de Laboratorio'],
-            ['nombre' => 'Coordinador de Investigación'],
-            ['nombre' => 'Asistente Administrativo'],
-            ['nombre' => 'Encargado de Sistemas'],
-            ['nombre' => 'Contador'],
-            ['nombre' => 'Portero/Seguridad'],
+            ['nombre' => 'Docente Tiempo Horario', 'sigla' => 'DOC-HOR'],
+            ['nombre' => 'Docente Tiempo Completo', 'sigla' => 'DOC-COM'],
+            ['nombre' => 'Director de Carrera', 'sigla' => 'DIR-CAR'],
+            ['nombre' => 'Secretaria Académica', 'sigla' => 'SEC-ACA'],
+            ['nombre' => 'Auxiliar de Laboratorio', 'sigla' => 'AUX-LAB'],
+            ['nombre' => 'Coordinador de Investigación', 'sigla' => 'COO-INV'],
+            ['nombre' => 'Asistente Administrativo', 'sigla' => 'ASI-ADM'],
+            ['nombre' => 'Encargado de Sistemas', 'sigla' => 'ENC-SIS'],
+            ['nombre' => 'Contador', 'sigla' => 'CON'],
+            ['nombre' => 'Portero/Seguridad', 'sigla' => 'POR-SEG'],
         ];
 
         foreach ($cargos as $cargo) {
