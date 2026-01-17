@@ -20,7 +20,7 @@ return new class extends Migration
         });
 
         Schema::table('convocatorias', function (Blueprint $table) {
-            $table->string('codigo_interno')->unique()->nullable()->after('titulo');
+            $table->string('codigo_interno')->nullable()->after('titulo');
         });
     }
 
