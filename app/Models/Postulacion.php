@@ -11,6 +11,8 @@ class Postulacion extends Model
     protected $fillable = [
         'postulante_id',
         'oferta_id',
+        'pretension_salarial',
+        'porque_cargo',
         'estado',
         'fecha_postulacion',
     ];

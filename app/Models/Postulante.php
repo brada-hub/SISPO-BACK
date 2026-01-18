@@ -23,6 +23,8 @@ class Postulante extends Model
         'ref_personal_parentesco',
         'ref_laboral_celular',
         'ref_laboral_detalle',
+        'pretension_salarial',
+        'porque_cargo',
     ];
 
     public function meritos()

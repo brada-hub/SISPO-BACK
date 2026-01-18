@@ -105,6 +105,14 @@ class PortalController extends Controller
             'ref_personal_parentesco' => 'nullable|string|max:255',
             'ref_laboral_celular' => 'nullable|string|max:20',
             'ref_laboral_detalle' => 'nullable|string|max:500',
+            'pretension_salarial' => 'nullable|numeric|min:0',
+            'porque_cargo' => 'nullable|string|max:1000',
+
+            // Per-Offer details
+            'ofertas_detalle' => 'nullable|array',
+            'ofertas_detalle.*.oferta_id' => 'required|exists:ofertas,id',
+            'ofertas_detalle.*.pretension_salarial' => 'required|numeric|min:0',
+            'ofertas_detalle.*.porque_cargo' => 'required|string|max:1000',
 
             // Files
             'foto_perfil' => 'nullable|image|max:2048',
@@ -135,6 +143,8 @@ class PortalController extends Controller
                     'ref_personal_parentesco' => $request->input('ref_personal_parentesco'),
                     'ref_laboral_celular' => $request->input('ref_laboral_celular'),
                     'ref_laboral_detalle' => $request->input('ref_laboral_detalle'),
+                    'pretension_salarial' => $validated['pretension_salarial'] ?? null,
+                    'porque_cargo' => $validated['porque_cargo'] ?? null,
                 ]
             );
 
@@ -161,12 +171,19 @@ class PortalController extends Controller
 
             $postulante->save();
 
-            // 3. Create ONE Postulacion per each oferta_id
+            // 3. Create ONE Postulacion per each oferta
             $postulacionIds = [];
+            $ofertasData = $request->input('ofertas_detalle', []);
+
             foreach ($validated['oferta_ids'] as $ofertaId) {
+                // Check if there's specific data for this offer, otherwise use global
+                $detalle = collect($ofertasData)->firstWhere('oferta_id', $ofertaId);
+
                 $postulacion = Postulacion::create([
                     'postulante_id' => $postulante->id,
                     'oferta_id' => $ofertaId,
+                    'pretension_salarial' => $detalle['pretension_salarial'] ?? $validated['pretension_salarial'],
+                    'porque_cargo' => $detalle['porque_cargo'] ?? $validated['porque_cargo'],
                     'estado' => 'enviada',
                     'fecha_postulacion' => now(),
                 ]);
@@ -245,6 +262,8 @@ class PortalController extends Controller
                     'sede' => $p->oferta->sede->nombre,
                     'estado' => $p->estado,
                     'fecha' => $p->fecha_postulacion,
+                    'pretension_salarial' => $p->pretension_salarial,
+                    'porque_cargo' => $p->porque_cargo,
                 ];
             })
         ]);
