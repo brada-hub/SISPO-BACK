@@ -17,11 +17,23 @@ class PostulacionController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede']);
+        $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'evaluacion']);
 
         if ($request->has('convocatoria_id')) {
             $query->whereHas('oferta', function($q) use ($request) {
                 $q->where('convocatoria_id', $request->convocatoria_id);
+            });
+        }
+
+        if ($request->has('sede_id') && $request->sede_id !== 'null' && $request->sede_id !== '') {
+            $query->whereHas('oferta', function($q) use ($request) {
+                $q->where('sede_id', $request->sede_id);
+            });
+        }
+
+        if ($request->has('cargo_id') && $request->cargo_id !== 'null' && $request->cargo_id !== '') {
+            $query->whereHas('oferta', function($q) use ($request) {
+                $q->where('cargo_id', $request->cargo_id);
             });
         }
 
@@ -30,7 +42,7 @@ class PostulacionController extends Controller
 
     public function show($id)
     {
-        return Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede'])->findOrFail($id);
+        return Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'evaluacion'])->findOrFail($id);
     }
 
     public function updateStatus(Request $request, $id)
@@ -71,19 +83,35 @@ class PostulacionController extends Controller
             }
 
             $convocatoria = Convocatoria::findOrFail($convocatoriaId);
-            $postulaciones = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede'])
+            $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'evaluacion'])
                 ->whereHas('oferta', function($q) use ($convocatoriaId) {
                     $q->where('convocatoria_id', $convocatoriaId);
-                })
-                ->get();
+                });
 
-            $spreadsheet = new Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Postulantes');
+            // Apply Filters
+            if (request('search')) {
+                $search = request('search');
+                $query->whereHas('postulante', function($q) use ($search) {
+                    $q->where('nombres', 'LIKE', "%{$search}%")
+                      ->orWhere('apellidos', 'LIKE', "%{$search}%")
+                      ->orWhere('ci', 'LIKE', "%{$search}%");
+                });
+            }
+            if (request('estado')) $query->where('estado', request('estado'));
+            if (request('sede_nombre')) {
+                $sede = request('sede_nombre');
+                $query->whereHas('oferta.sede', function($q) use ($sede) { $q->where('nombre', $sede); });
+            }
+            if (request('cargo_nombre')) {
+                $cargo = request('cargo_nombre');
+                $query->whereHas('oferta.cargo', function($q) use ($cargo) { $q->where('nombre', $cargo); });
+            }
+            if (request('salario_min')) $query->where('pretension_salarial', '>=', request('salario_min'));
+            if (request('salario_max')) $query->where('pretension_salarial', '<=', request('salario_max'));
 
-            // 1. Headers (ONLY requested columns)
-            $coreHeaders = ['SEDE', 'CARGO', 'NOMBRES', 'APELLIDOS', 'CELULAR', 'EMAIL', 'PRETENSION SALARIAL'];
+            $postulaciones = $query->get();
 
+            // Prepare Dynamic Merit Headers
             $tiposIds = $convocatoria->config_requisitos_ids ?? [];
             $tiposDocumento = TipoDocumento::whereIn('id', $tiposIds)->get();
             $meritHeaders = [];
@@ -94,100 +122,132 @@ class PostulacionController extends Controller
                         $key = $campo['key'] ?? $campo['name'] ?? null;
                         if (!$key) continue;
                         $meritHeaders[] = strtoupper($tipo->nombre) . ": " . strtoupper($campo['label']);
-                        $meritFieldKeys[] = [
-                            'tipo_id' => $tipo->id,
-                            'key' => $key
-                        ];
+                        $meritFieldKeys[] = ['tipo_id' => $tipo->id, 'key' => $key];
                     }
                 }
             }
 
-            $headers = array_merge($coreHeaders, $meritHeaders);
+            // Group by Sede and Cargo
+            $grouped = $postulaciones->groupBy(function($item) {
+                return strtoupper($item->oferta->sede->nombre ?? 'SEDE NO DEFINIDA') . ' - ' . strtoupper($item->oferta->cargo->nombre ?? 'CARGO NO DEFINIDO');
+            })->sortKeys();
 
-            // Apply Header Styles (Morado Premium)
-            $lastColIdx = count($headers);
-            $lastColLetter = Coordinate::stringFromColumnIndex($lastColIdx);
-            $sheet->fromArray($headers, null, 'A1');
-            $sheet->getStyle("A1:{$lastColLetter}1")->applyFromArray([
-                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 12],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => '6A1B9A']
-                ],
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Matriz Técnica');
+
+            // 1. Main Title
+            $sheet->setCellValue('A1', 'MATRIZ TÉCNICA DE POSTULACIONES - ' . strtoupper($convocatoria->titulo));
+            $coreHeaders = ['NO.', 'POSTULANTE', 'CI', 'CELULAR', 'EMAIL', 'ÁREA FORMACIÓN', 'AÑO TÍTULO', 'PRETENSIÓN (BS)'];
+            $totalCols = count($coreHeaders) + count($meritHeaders) + 1; // +1 for Observations
+            $lastColLetter = Coordinate::stringFromColumnIndex($totalCols);
+            $sheet->mergeCells("A1:{$lastColLetter}1");
+            $sheet->getStyle('A1')->applyFromArray([
+                'font' => ['bold' => true, 'size' => 16, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4A148C']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
             ]);
-            $sheet->getRowDimension(1)->setRowHeight(30);
-            $sheet->freezePane('A2');
+            $sheet->getRowDimension(1)->setRowHeight(35);
 
-            // 2. Data
-            $rowIdx = 2;
-            foreach ($postulaciones as $p) {
-                $post = $p->postulante;
-                if (!$post) continue;
+            $currentRow = 3;
+            // Removed statusLabels as 'ESTADO' is no longer a core header
 
-                $dataRow = [
-                    strtoupper($p->oferta->sede->nombre ?? 'N/A'),
-                    strtoupper($p->oferta->cargo->nombre ?? 'N/A'),
-                    strtoupper($post->nombres),
-                    strtoupper($post->apellidos),
-                    $post->celular,
-                    $post->email,
-                    $p->pretension_salarial,
-                ];
-
-                foreach ($meritFieldKeys as $config) {
-                    $meritos = $post->meritos->where('tipo_documento_id', $config['tipo_id']);
-                    $vals = []; $i = 1;
-                    foreach ($meritos as $m) {
-                        $v = $m->respuestas[$config['key']] ?? '';
-                        if ($v) {
-                            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $v, $matches)) {
-                                $v = "{$matches[3]}-{$matches[2]}-{$matches[1]}";
-                            }
-                            $vals[] = ($meritos->count() > 1 ? "{$i}. " : "") . strtoupper($v);
-                            $i++;
-                        }
-                    }
-                    $dataRow[] = implode("\n", $vals);
-                }
-
-                $sheet->fromArray($dataRow, null, 'A' . $rowIdx);
-
-                // Simple styling for row
-                $range = "A{$rowIdx}:{$lastColLetter}{$rowIdx}";
-                $sheet->getStyle($range)->applyFromArray([
-                    'alignment' => [
-                        'vertical' => Alignment::VERTICAL_CENTER,
-                        'horizontal' => Alignment::HORIZONTAL_LEFT,
-                        'wrapText' => true,
-                        'indent' => 1
-                    ],
-                    'borders' => [
-                        'allBorders' => [
-                            'borderStyle' => Border::BORDER_THIN,
-                            'color' => ['rgb' => 'CCCCCC'],
-                        ],
-                    ],
+            foreach ($grouped as $groupName => $items) {
+                // Group Header
+                $sheet->setCellValue('A' . $currentRow, $groupName);
+                $sheet->mergeCells("A{$currentRow}:{$lastColLetter}{$currentRow}");
+                $sheet->getStyle("A{$currentRow}")->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 12, 'color' => ['rgb' => 'FFFFFF']],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '009688']],
                 ]);
+                $sheet->getRowDimension($currentRow)->setRowHeight(25);
+                $currentRow++;
 
-                $rowIdx++;
+                // Table Headers
+                $headers = array_merge($coreHeaders, $meritHeaders, ['OBSERVACIONES']);
+                $sheet->fromArray([$headers], null, 'A' . $currentRow);
+                $headerRange = "A{$currentRow}:{$lastColLetter}{$currentRow}";
+                $sheet->getStyle($headerRange)->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 9, 'color' => ['rgb' => '4A148C']],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F3E5F5']],
+                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+                ]);
+                $sheet->getRowDimension($currentRow)->setRowHeight(45);
+                $currentRow++;
+
+                // Data
+                $counter = 1;
+                foreach ($items as $p) {
+                    $post = $p->postulante;
+
+                    // Extract Area and Year (Same as Matrix UI) - ADDED SAFETY CHECKS
+                    $formacion = $post->meritos->where('tipoDocumento.nombre', 'FORMACIÓN ACADÉMICA')->first();
+                    $area = '-';
+                    $anio = '-';
+
+                    if ($formacion && isset($formacion->respuestas)) {
+                        $area = strtoupper($formacion->respuestas['profesion'] ?? '-');
+                        $fechaTit = $formacion->respuestas['fecha_titulo'] ?? '';
+                        $anio = $fechaTit ? substr($fechaTit, 0, 4) : '-';
+                    }
+
+                    $dataRow = [
+                        $counter++,
+                        strtoupper(($post->nombres ?? '') . ' ' . ($post->apellidos ?? '')),
+                        $post->ci ?? '-',
+                        $post->celular ?? '-',
+                        strtolower($post->email ?? '-'),
+                        $area,
+                        $anio,
+                        (float)($p->pretension_salarial ?? 0)
+                    ];
+
+                    // Dynamic Merit Values
+                    foreach ($meritFieldKeys as $config) {
+                        $merito = $post->meritos->where('tipo_documento_id', $config['tipo_id'])->first();
+                        $val = '-';
+                        if ($merito && isset($merito->respuestas)) {
+                            $val = $merito->respuestas[$config['key']] ?? '-';
+                            if (is_array($val)) $val = implode(', ', $val);
+                        }
+                        $dataRow[] = strtoupper((string)$val);
+                    }
+
+                    // Add Observations at the end
+                    $obs = ($p->evaluacion) ? $p->evaluacion->observaciones : '-';
+                    $dataRow[] = strtoupper((string)($obs ?: '-'));
+
+                    $sheet->fromArray([$dataRow], null, 'A' . $currentRow);
+
+                    // Formatting for numeric Pretension
+                    $pretCol = Coordinate::stringFromColumnIndex(8);
+                    $sheet->getStyle("{$pretCol}{$currentRow}")->getNumberFormat()->setFormatCode('#,##0');
+
+                    $sheet->getStyle("A{$currentRow}:{$lastColLetter}{$currentRow}")->applyFromArray([
+                        'alignment' => ['vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+                        'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'EEEEEE']]]
+                    ]);
+                    $currentRow++;
+                }
+                $currentRow += 2;
             }
 
             // Auto-size columns
-            for ($i = 1; $i <= $lastColIdx; $i++) {
-                $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setAutoSize(true);
+            foreach (range(1, $totalCols) as $colIdx) {
+                $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIdx))->setAutoSize(true);
             }
 
             $writer = new Xlsx($spreadsheet);
-            $filename = "Reporte_Postulantes_" . str_replace(' ', '_', $convocatoria->titulo) . ".xlsx";
+            $filename = "Reporte_Matriz_" . str_replace([' ', '/', '\\'], '_', $convocatoria->titulo) . ".xlsx";
 
             return response()->streamDownload(function() use ($writer) {
                 $writer->save('php://output');
             }, $filename);
 
         } catch (\Throwable $e) {
-            \Log::error("Error en exportación: " . $e->getMessage());
-            return response()->json(['error' => 'Error interno en el servidor al generar el Excel.'], 500);
+            \Log::error("Error en exportación integral: " . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

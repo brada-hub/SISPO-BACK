@@ -30,4 +30,9 @@ class Postulacion extends Model
     {
         return $this->belongsTo(Oferta::class);
     }
+
+    public function evaluacion()
+    {
+        return $this->hasOne(EvaluacionPostulacion::class, 'postulacion_id');
+    }
 }
