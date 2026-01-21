@@ -63,8 +63,8 @@ class ImportController extends Controller
                 ['titulo' => 'MIGRACIÓN DATA EXTERNA (GOOGLE FORMS)'],
                 [
                     'descripcion' => 'Importación de datos históricos desde formularios externos por sedes',
-                    'fecha_inicio' => now()->format('Y-m-d'),
-                    'fecha_cierre' => now()->addYear()->format('Y-m-d'),
+                    'fecha_inicio' => '2026-01-12',
+                    'fecha_cierre' => '2026-01-13',
                     'config_requisitos_ids' => [1], // Formación Académica
                     'gestion' => date('Y')
                 ]

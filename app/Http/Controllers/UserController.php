@@ -30,18 +30,18 @@ class UserController extends Controller
         return User::create($validated);
     }
 
-    public function update(Request $request, User $user)
+    public function update(Request $request, User $usuario)
     {
         $validated = $request->validate([
             'rol_id' => 'required|exists:roles,id',
             'nombres' => 'required|string|max:255',
             'apellidos' => 'required|string|max:255',
-            'ci' => 'required|string|unique:users,ci,' . $user->id,
+            'ci' => 'required|string|unique:users,ci,' . $usuario->id,
             'activo' => 'boolean',
         ]);
 
-        $user->update($validated);
-        return $user;
+        $usuario->update($validated);
+        return $usuario;
     }
 
     public function changePassword(Request $request)
@@ -62,9 +62,9 @@ class UserController extends Controller
         ]);
     }
 
-    public function destroy(User $user)
+    public function destroy(User $usuario)
     {
-        $user->delete();
+        $usuario->delete();
         return response()->noContent();
     }
 }
