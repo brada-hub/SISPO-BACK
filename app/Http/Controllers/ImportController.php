@@ -161,20 +161,58 @@ class ImportController extends Controller
                         }
                     }
 
-                    $postulante = Postulante::updateOrCreate(['ci' => $ci], [
-                        'nombres' => strtoupper($nombres),
-                        'apellidos' => strtoupper($apellidos),
-                        'email' => Str::slug($nombreCompleto) . '@externo.com',
-                    ]);
+                    // 3.5 SMART UPDATE POSTULANTE
+                    $postulante = Postulante::where('ci', $ci)->first();
+                    if (!$postulante) {
+                        $postulante = Postulante::create([
+                            'ci' => $ci,
+                            'nombres' => strtoupper($nombres),
+                            'apellidos' => strtoupper($apellidos),
+                            'email' => Str::slug($nombreCompleto) . '@externo.com',
+                        ]);
+                    } else {
+                        // Update names only if different and not empty
+                        $pUpdated = false;
+                        if (!empty($nombres) && $postulante->nombres !== strtoupper($nombres)) {
+                            $postulante->nombres = strtoupper($nombres);
+                            $pUpdated = true;
+                        }
+                        if (!empty($apellidos) && $postulante->apellidos !== strtoupper($apellidos)) {
+                            $postulante->apellidos = strtoupper($apellidos);
+                            $pUpdated = true;
+                        }
+                        if ($pUpdated) $postulante->save();
+                    }
 
-                    // 4. Postulacion (Link)
-                    $postulacion = Postulacion::updateOrCreate([
-                        'postulante_id' => $postulante->id,
-                        'oferta_id' => $oferta->id
-                    ], [
-                        'pretension_salarial' => $pretension ?: DB::raw('pretension_salarial'),
-                        // We keep the first state or specific updates
-                    ]);
+                    // 4. Postulacion (CONVOCATORIA UNIQUE CHECK)
+                    // Buscamos si ya tiene una postulación en ESTA convocatoria (independiente de la oferta)
+                    $postulacion = Postulacion::where('postulante_id', $postulante->id)
+                        ->whereHas('oferta', function($q) use ($convocatoriaId) {
+                            $q->where('convocatoria_id', $convocatoriaId);
+                        })->first();
+
+                    if ($postulacion) {
+                        // SI YA EXISTE EN LA CONVOCATORIA -> Solo actualizamos si los datos son diferentes
+                        $posUpdated = false;
+                        if ($postulacion->oferta_id != $oferta->id) {
+                            $postulacion->oferta_id = $oferta->id;
+                            $posUpdated = true;
+                        }
+                        if ($pretension > 0 && $postulacion->pretension_salarial != $pretension) {
+                            $postulacion->pretension_salarial = $pretension;
+                            $posUpdated = true;
+                        }
+                        if ($posUpdated) $postulacion->save();
+                    } else {
+                        // SI NO EXISTE -> Creamos la postulación
+                        $postulacion = Postulacion::create([
+                            'postulante_id' => $postulante->id,
+                            'oferta_id' => $oferta->id,
+                            'pretension_salarial' => $pretension,
+                            'estado' => 'pendiente',
+                            'fecha_postulacion' => now()
+                        ]);
+                    }
 
                     // 5. Merit Data
                     $tipoFormacion = TipoDocumento::where('nombre', 'LIKE', '%FORMACIÓN%')->first();
@@ -186,18 +224,45 @@ class ImportController extends Controller
                             } catch (\Exception $e) {}
                         }
 
-                        PostulanteMerito::updateOrCreate([
-                            'postulante_id' => $postulante->id,
-                            'tipo_documento_id' => $tipoFormacion->id
-                        ], [
-                            'respuestas' => [
-                                'nivel' => 'LICENCIATURA',
-                                'profesion' => strtoupper($profesion),
-                                'fecha_titulo' => $fechaTitulo,
-                                'universidad' => 'MIGRACIÓN'
-                            ],
-                            'estado_verificacion' => 'validado'
-                        ]);
+                        // Respuestas nuevas
+                        $newRes = [
+                            'nivel' => 'LICENCIATURA',
+                            'profesion' => strtoupper($profesion),
+                            'fecha_titulo' => $fechaTitulo,
+                            'universidad' => 'MIGRACIÓN'
+                        ];
+
+                        $merito = PostulanteMerito::where('postulante_id', $postulante->id)
+                            ->where('tipo_documento_id', $tipoFormacion->id)
+                            ->first();
+
+                        if ($merito) {
+                            // Comparar respuestas actuales vs nuevas (campos básicos)
+                            $currentRes = $merito->respuestas ?? [];
+                            $mUpdated = false;
+
+                            foreach ($newRes as $key => $val) {
+                                if (isset($currentRes[$key]) && $currentRes[$key] != $val && !empty($val)) {
+                                    $currentRes[$key] = $val;
+                                    $mUpdated = true;
+                                } elseif (!isset($currentRes[$key]) && !empty($val)) {
+                                    $currentRes[$key] = $val;
+                                    $mUpdated = true;
+                                }
+                            }
+
+                            if ($mUpdated) {
+                                $merito->respuestas = $currentRes;
+                                $merito->save();
+                            }
+                        } else {
+                            PostulanteMerito::create([
+                                'postulante_id' => $postulante->id,
+                                'tipo_documento_id' => $tipoFormacion->id,
+                                'respuestas' => $newRes,
+                                'estado_verificacion' => 'validado'
+                            ]);
+                        }
                     }
 
                     DB::commit();
