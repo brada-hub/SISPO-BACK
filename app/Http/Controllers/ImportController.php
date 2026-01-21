@@ -20,7 +20,7 @@ class ImportController extends Controller
     public function importExcel(Request $request)
     {
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv',
+            'file' => 'required|mimes:xlsx,xls,csv,txt,application/vnd.ms-excel,text/csv,text/plain',
             'convocatoria_id' => 'nullable|exists:convocatorias,id'
         ]);
 
