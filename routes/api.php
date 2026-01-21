@@ -59,4 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('usuarios/cambiar-password', [\App\Http\Controllers\UserController::class, 'changePassword']);
     Route::apiResource('usuarios', \App\Http\Controllers\UserController::class);
     Route::apiResource('roles', \App\Http\Controllers\RolController::class);
+
+    // Ruta de importación
+    Route::post('importar-excel', [\App\Http\Controllers\ImportController::class, 'importExcel']);
 });
