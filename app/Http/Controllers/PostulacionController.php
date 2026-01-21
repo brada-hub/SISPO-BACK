@@ -294,4 +294,17 @@ class PostulacionController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    public function destroy($id)
+    {
+        $user = auth()->user();
+        if (!$user || $user->rol->nombre !== 'ADMINISTRADOR') {
+            return response()->json(['message' => 'No tiene permisos para eliminar postulaciones'], 403);
+        }
+
+        $postulacion = Postulacion::findOrFail($id);
+        $postulacion->delete();
+
+        return response()->json(['success' => true, 'message' => 'Postulación eliminada correctamente']);
+    }
 }

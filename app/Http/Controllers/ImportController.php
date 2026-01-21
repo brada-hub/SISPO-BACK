@@ -38,7 +38,7 @@ class ImportController extends Controller
             ], 500);
         }
 
-        $targetSheets = ['EAL', 'IVI', 'LPZ', 'PTO', 'SCZ'];
+        $targetSheets = ['EAL', 'IVI', 'LPZ', 'PQJ', 'SCZ', 'COC', 'GYA', 'CBJ', 'NAC'];
         $availableSheets = $spreadsheet->getSheetNames();
 
         // Filter target sheets that actually exist in the file
@@ -121,7 +121,24 @@ class ImportController extends Controller
                     $pretension = ($idxPretension != -1) ? floatval(preg_replace('/[^0-9.]/', '', (string)$row[$idxPretension])) : 0;
 
                     // 1. Sede y Cargo
-                    $sede = Sede::firstOrCreate(['nombre' => strtoupper($sedeNombre)]);
+                    $sede = Sede::where('nombre', strtoupper($sedeNombre))
+                        ->orWhere('sigla', strtoupper($sedeNombre))
+                        ->first();
+
+                    if (!$sede) {
+                        // Intentar buscar por el nombre de la hoja si el valor de la celda no funcionó
+                        $sede = Sede::where('sigla', strtoupper($sheetName))
+                            ->orWhere('nombre', strtoupper($sheetName))
+                            ->first();
+                    }
+
+                    if (!$sede) {
+                        $results['errors'][] = "Error en hoja $sheetName, fila " . ($i+1) . ": Sede '$sedeNombre' no reconocida.";
+                        DB::rollBack();
+                        $results['total']++;
+                        continue;
+                    }
+
                     $cargo = Cargo::firstOrCreate(['nombre' => strtoupper($cargoNombre)]);
 
                     // 2. Oferta
@@ -184,32 +201,25 @@ class ImportController extends Controller
                         if ($pUpdated) $postulante->save();
                     }
 
-                    // 4. Postulacion (CONVOCATORIA UNIQUE CHECK)
-                    // Buscamos si ya tiene una postulación en ESTA convocatoria (independiente de la oferta)
+                    // 4. Postulacion (Cargo + Sede UNIQUE CHECK)
+                    // Buscamos si ya tiene una postulación EXACTAMENTE para esta oferta (misma sede y mismo cargo)
                     $postulacion = Postulacion::where('postulante_id', $postulante->id)
-                        ->whereHas('oferta', function($q) use ($convocatoriaId) {
-                            $q->where('convocatoria_id', $convocatoriaId);
-                        })->first();
+                        ->where('oferta_id', $oferta->id)
+                        ->first();
 
                     if ($postulacion) {
-                        // SI YA EXISTE EN LA CONVOCATORIA -> Solo actualizamos si los datos son diferentes
-                        $posUpdated = false;
-                        if ($postulacion->oferta_id != $oferta->id) {
-                            $postulacion->oferta_id = $oferta->id;
-                            $posUpdated = true;
-                        }
+                        // SI YA EXISTE -> Solo actualizamos si los datos son diferentes (ej. pretensión)
                         if ($pretension > 0 && $postulacion->pretension_salarial != $pretension) {
                             $postulacion->pretension_salarial = $pretension;
-                            $posUpdated = true;
+                            $postulacion->save();
                         }
-                        if ($posUpdated) $postulacion->save();
                     } else {
-                        // SI NO EXISTE -> Creamos la postulación
+                        // SI NO EXISTE para esta oferta -> Creamos la postulación (permite múltiples ofertas por postulante)
                         $postulacion = Postulacion::create([
                             'postulante_id' => $postulante->id,
                             'oferta_id' => $oferta->id,
                             'pretension_salarial' => $pretension,
-                            'estado' => 'pendiente',
+                            'estado' => 'enviada', // 'enviada' equivale a 'Postulado' en el frontend
                             'fecha_postulacion' => now()
                         ]);
                     }
