@@ -30,6 +30,7 @@ class EvaluacionMeritoController extends Controller
             'puntaje_total' => 'required|numeric',
             'detalle_evaluacion' => 'required|array',
             'observaciones' => 'nullable|string',
+            'pretension_salarial' => 'nullable|numeric',
         ]);
 
         $evaluacion = EvaluacionPostulacion::updateOrCreate(
@@ -50,12 +51,18 @@ class EvaluacionMeritoController extends Controller
         $postulacion = \App\Models\Postulacion::find($validated['postulacion_id']);
         if ($postulacion->estado === 'enviada') {
             $postulacion->estado = 'en_revision';
-            $postulacion->save();
         }
+
+        // Update pretension salarial if provided
+        if ($request->has('pretension_salarial')) {
+            $postulacion->pretension_salarial = $validated['pretension_salarial'];
+        }
+
+        $postulacion->save();
 
         return response()->json([
             'success' => true,
-            'message' => 'Evaluación guardada correctamente',
+            'message' => 'Evaluación y pretensión guardadas correctamente',
             'data' => $evaluacion
         ]);
     }
