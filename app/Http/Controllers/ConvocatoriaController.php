@@ -31,7 +31,7 @@ class ConvocatoriaController extends Controller
     {
         $validated = $request->validate([
             'titulo' => 'required|string|max:255',
-            'codigo_interno' => 'nullable|string|max:50|unique:convocatorias,codigo_interno',
+            'codigo_interno' => 'nullable|string|max:50',
             'descripcion' => 'nullable|string',
             'fecha_inicio' => 'required|date',
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
@@ -77,7 +77,7 @@ class ConvocatoriaController extends Controller
     {
         $validated = $request->validate([
             'titulo' => 'required|string|max:255',
-            'codigo_interno' => 'nullable|string|max:50|unique:convocatorias,codigo_interno,'.$convocatoria->id,
+            'codigo_interno' => 'nullable|string|max:50',
             'descripcion' => 'nullable|string',
             'fecha_inicio' => 'required|date',
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',

@@ -11,6 +11,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class PostulacionController extends Controller
 {
@@ -76,35 +77,32 @@ class PostulacionController extends Controller
                 })
                 ->get();
 
-            $storageUrl = url('/storage');
-
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle('Postulantes');
 
-            // 1. Headers (No ID POSTULACION)
-            $headers = ['ESTADO','FECHA POSTULACION','CARGO','SEDE'];
-            $personalHeaders = [
-                'NOMBRES','APELLIDOS','CI','EXPEDIDO','NACIONALIDAD','CELULAR','EMAIL',
-                'DIRECCION','PRETENSION SALARIAL','MOTIVACION','REF PERSONAL','CEL REF PERS',
-                'CEL REF LAB','DETALLE REF LAB',
-                'CI LINK','FOTO LINK','CV LINK','CARTA LINK'
-            ];
-            $headers = array_merge($headers, $personalHeaders);
+            // 1. Headers (ONLY requested columns)
+            $coreHeaders = ['SEDE', 'CARGO', 'NOMBRES', 'APELLIDOS', 'CELULAR', 'EMAIL', 'PRETENSION SALARIAL'];
 
             $tiposIds = $convocatoria->config_requisitos_ids ?? [];
             $tiposDocumento = TipoDocumento::whereIn('id', $tiposIds)->get();
+            $meritHeaders = [];
             $meritFieldKeys = [];
             foreach ($tiposDocumento as $tipo) {
                 if ($tipo->campos) {
                     foreach ($tipo->campos as $campo) {
                         $key = $campo['key'] ?? $campo['name'] ?? null;
                         if (!$key) continue;
-                        $headers[] = strtoupper($tipo->nombre) . ": " . strtoupper($campo['label']);
-                        $meritFieldKeys[] = ['tipo_id' => $tipo->id, 'key' => $key];
+                        $meritHeaders[] = strtoupper($tipo->nombre) . ": " . strtoupper($campo['label']);
+                        $meritFieldKeys[] = [
+                            'tipo_id' => $tipo->id,
+                            'key' => $key
+                        ];
                     }
                 }
             }
+
+            $headers = array_merge($coreHeaders, $meritHeaders);
 
             // Apply Header Styles (Morado Premium)
             $lastColIdx = count($headers);
@@ -119,44 +117,22 @@ class PostulacionController extends Controller
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
             ]);
             $sheet->getRowDimension(1)->setRowHeight(30);
+            $sheet->freezePane('A2');
 
             // 2. Data
             $rowIdx = 2;
-            $statusColors = [
-                'enviada' => 'E3F2FD',
-                'en_revision' => 'FFF8E1',
-                'validada' => 'E8F5E9',
-                'observada' => 'FFF3E0',
-                'rechazada' => 'FFEBEE'
-            ];
-
             foreach ($postulaciones as $p) {
                 $post = $p->postulante;
                 if (!$post) continue;
 
                 $dataRow = [
-                    strtoupper($p->estado),
-                    $p->created_at ? $p->created_at->format('d/m/Y') : '',
-                    strtoupper($p->oferta->cargo->nombre ?? 'N/A'),
                     strtoupper($p->oferta->sede->nombre ?? 'N/A'),
+                    strtoupper($p->oferta->cargo->nombre ?? 'N/A'),
                     strtoupper($post->nombres),
                     strtoupper($post->apellidos),
-                    $post->ci,
-                    strtoupper($post->ci_expedido),
-                    strtoupper($post->nacionalidad),
                     $post->celular,
                     $post->email,
-                    strtoupper($post->direccion_domicilio),
                     $p->pretension_salarial,
-                    strtoupper($p->porque_cargo),
-                    strtoupper($post->ref_personal_parentesco),
-                    $post->ref_personal_celular,
-                    $post->ref_laboral_celular,
-                    strtoupper($post->ref_laboral_detalle),
-                    $post->ci_archivo_path ? "{$storageUrl}/{$post->ci_archivo_path}" : '',
-                    $post->foto_perfil_path ? "{$storageUrl}/{$post->foto_perfil_path}" : '',
-                    $post->cv_pdf_path ? "{$storageUrl}/{$post->cv_pdf_path}" : '',
-                    $post->carta_postulacion_path ? "{$storageUrl}/{$post->carta_postulacion_path}" : '',
                 ];
 
                 foreach ($meritFieldKeys as $config) {
@@ -165,6 +141,9 @@ class PostulacionController extends Controller
                     foreach ($meritos as $m) {
                         $v = $m->respuestas[$config['key']] ?? '';
                         if ($v) {
+                            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $v, $matches)) {
+                                $v = "{$matches[3]}-{$matches[2]}-{$matches[1]}";
+                            }
                             $vals[] = ($meritos->count() > 1 ? "{$i}. " : "") . strtoupper($v);
                             $i++;
                         }
@@ -174,26 +153,22 @@ class PostulacionController extends Controller
 
                 $sheet->fromArray($dataRow, null, 'A' . $rowIdx);
 
-                // Style Row
-                $color = $statusColors[$p->estado] ?? 'FFFFFF';
+                // Simple styling for row
                 $range = "A{$rowIdx}:{$lastColLetter}{$rowIdx}";
                 $sheet->getStyle($range)->applyFromArray([
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $color]],
-                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true]
+                    'alignment' => [
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                        'horizontal' => Alignment::HORIZONTAL_LEFT,
+                        'wrapText' => true,
+                        'indent' => 1
+                    ],
+                    'borders' => [
+                        'allBorders' => [
+                            'borderStyle' => Border::BORDER_THIN,
+                            'color' => ['rgb' => 'CCCCCC'],
+                        ],
+                    ],
                 ]);
-
-                // Hyperlinks (Linking columns O-R approx)
-                // Col indices: ci link is 18 (S) to carta link 21 (V)
-                for($c = 19; $c <= 22; $c++) {
-                    $cell = Coordinate::stringFromColumnIndex($c) . $rowIdx;
-                    $val = $sheet->getCell($cell)->getValue();
-                    if($val && str_starts_with($val, 'http')) {
-                        $sheet->getCell($cell)->getHyperlink()->setUrl($val);
-                        $sheet->setCellValue($cell, 'DESCARGAR');
-                        $sheet->getStyle($cell)->getFont()->getColor()->setRGB('1565C0');
-                        $sheet->getStyle($cell)->getFont()->setUnderline(true);
-                    }
-                }
 
                 $rowIdx++;
             }
@@ -223,36 +198,29 @@ class PostulacionController extends Controller
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
 
-            $headers = ['POSTULANTE','CI','PRETENSION','CELULAR','EMAIL','CARGO','SEDE','ESTADO','FECHA'];
+            $headers = ['SEDE','CARGO','NOMBRES','APELLIDOS','CELULAR','EMAIL','PRETENSION'];
             $sheet->fromArray($headers, null, 'A1');
 
             $lastCol = Coordinate::stringFromColumnIndex(count($headers));
             $sheet->getStyle("A1:{$lastCol}1")->applyFromArray([
-                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '6A1B9A']]
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '6A1B9A']],
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']]
             ]);
+            $sheet->freezePane('A2');
 
             $rowIdx = 2;
-            $statusColors = [
-                'enviada' => 'E3F2FD', 'en_revision' => 'FFF8E1', 'validada' => 'E8F5E9', 'observada' => 'FFF3E0', 'rechazada' => 'FFEBEE'
-            ];
-
             foreach ($postulaciones as $p) {
                 if (!$p->postulante) continue;
                 $dataRow = [
-                    strtoupper($p->postulante->nombres . ' ' . $p->postulante->apellidos),
-                    $p->postulante->ci,
-                    $p->pretension_salarial,
+                    strtoupper($p->oferta->sede->nombre ?? 'N/A'),
+                    strtoupper($p->oferta->cargo->nombre ?? 'N/A'),
+                    strtoupper($p->postulante->nombres),
+                    strtoupper($p->postulante->apellidos),
                     $p->postulante->celular,
                     $p->postulante->email,
-                    strtoupper($p->oferta->cargo->nombre ?? 'N/A'),
-                    strtoupper($p->oferta->sede->nombre ?? 'N/A'),
-                    strtoupper($p->estado),
-                    $p->created_at ? $p->created_at->format('d/m/Y') : ''
+                    $p->pretension_salarial
                 ];
                 $sheet->fromArray($dataRow, null, 'A' . $rowIdx);
-                $color = $statusColors[$p->estado] ?? 'FFFFFF';
-                $sheet->getStyle("A{$rowIdx}:{$lastCol}{$rowIdx}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($color);
                 $rowIdx++;
             }
 
