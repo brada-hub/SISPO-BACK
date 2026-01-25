@@ -14,15 +14,24 @@ class Convocatoria extends Model
         'fecha_cierre',
         'hora_limite',
         'config_requisitos_ids',
+        'requisitos_opcionales',
         'requisitos_afiche',
     ];
 
     protected $casts = [
         'config_requisitos_ids' => 'array',
+        'requisitos_opcionales' => 'array',
         'requisitos_afiche' => 'array',
         'fecha_inicio' => 'date',
         'fecha_cierre' => 'date',
     ];
+
+    protected $appends = ['gestion'];
+
+    public function getGestionAttribute()
+    {
+        return $this->fecha_inicio ? $this->fecha_inicio->format('Y') : null;
+    }
 
     public function ofertas()
     {

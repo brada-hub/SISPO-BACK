@@ -46,13 +46,31 @@ class UserController extends Controller
 
     public function changePassword(Request $request)
     {
-        $validated = $request->validate([
-            'password' => 'required|string|min:6|confirmed',
-        ]);
-
         $user = auth()->user();
         /** @var \App\Models\User $user */
-        $user->password = Hash::make($validated['password']);
+
+        $rules = [
+            'password' => 'required|string|min:6|confirmed',
+        ];
+
+        // Solo validamos password_current si el usuario NO tiene pendiente el cambio obligatorio
+        if (!$user->must_change_password) {
+            $rules['password_current'] = 'required';
+        }
+
+        $request->validate($rules);
+
+        // Si no es un cambio obligatorio, verificar que la contraseña actual sea correcta
+        if (!$user->must_change_password) {
+            if (!Hash::check($request->password_current, $user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'La contraseña actual no es correcta.'
+                ], 422);
+            }
+        }
+
+        $user->password = Hash::make($request->password);
         $user->must_change_password = false;
         $user->save();
 

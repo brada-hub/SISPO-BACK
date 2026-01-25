@@ -17,7 +17,7 @@ class PostulacionController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'evaluacion']);
+        $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'oferta.convocatoria', 'evaluacion']);
 
         if ($request->has('convocatoria_id')) {
             $query->whereHas('oferta', function($q) use ($request) {

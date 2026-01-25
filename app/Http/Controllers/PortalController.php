@@ -67,6 +67,7 @@ class PortalController extends Controller
         $convocatoria = Convocatoria::findOrFail($convocatoriaId);
 
         $requisitosIds = $convocatoria->config_requisitos_ids ?? [];
+        $opcionales = $convocatoria->requisitos_opcionales ?? [];
 
         if (empty($requisitosIds)) {
             return response()->json([]);
@@ -74,7 +75,11 @@ class PortalController extends Controller
 
         $requisitos = TipoDocumento::whereIn('id', $requisitosIds)
             ->orderBy('orden')
-            ->get();
+            ->get()
+            ->map(function($req) use ($opcionales) {
+                $req->opcional = in_array($req->id, $opcionales);
+                return $req;
+            });
 
         return response()->json($requisitos);
     }

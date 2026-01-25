@@ -37,6 +37,7 @@ class ConvocatoriaController extends Controller
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
             'hora_limite' => 'nullable',
             'config_requisitos_ids' => 'nullable|array',
+            'requisitos_opcionales' => 'nullable|array',
             'requisitos_afiche' => 'nullable|array',
             'ofertas' => 'required|array|min:1',
             'ofertas.*.sede_id' => 'required|exists:sedes,id',
@@ -52,6 +53,7 @@ class ConvocatoriaController extends Controller
                 'fecha_cierre' => $validated['fecha_cierre'],
                 'hora_limite' => $validated['hora_limite'],
                 'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
+                'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
                 'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
             ]);
 
@@ -83,6 +85,7 @@ class ConvocatoriaController extends Controller
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
             'hora_limite' => 'nullable',
             'config_requisitos_ids' => 'nullable|array',
+            'requisitos_opcionales' => 'nullable|array',
             'requisitos_afiche' => 'nullable|array',
             'ofertas' => 'required|array|min:1',
             'ofertas.*.sede_id' => 'required|exists:sedes,id',
@@ -98,6 +101,7 @@ class ConvocatoriaController extends Controller
                 'fecha_cierre' => $validated['fecha_cierre'],
                 'hora_limite' => $validated['hora_limite'],
                 'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
+                'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
                 'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
             ]);
 
