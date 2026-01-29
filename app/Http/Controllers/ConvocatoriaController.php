@@ -128,8 +128,27 @@ class ConvocatoriaController extends Controller
 
     public function convocatoriasConPostulantes()
     {
-        return Convocatoria::withCount('postulaciones')
-            ->orderBy('fecha_inicio', 'desc')
-            ->get();
+        $user = auth()->user();
+        $query = Convocatoria::withCount(['postulaciones' => function($q) use ($user) {
+            if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+                $q->whereHas('oferta', function($oq) use ($user) {
+                    $oq->where('sede_id', $user->sede_id);
+                });
+            }
+        }]);
+
+        // Si el usuario es limitado, solo mostrar convocatorias que tienen ofertas en su sede
+        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            $query->whereHas('ofertas', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        return $query->with(['ofertas' => function($q) use ($user) {
+            if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+                $q->where('sede_id', $user->sede_id);
+            }
+            $q->with('sede');
+        }])->orderBy('fecha_inicio', 'desc')->get();
     }
 }

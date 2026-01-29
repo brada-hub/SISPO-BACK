@@ -16,32 +16,53 @@ class DashboardController extends Controller
     public function getStats()
     {
         $hoy = Carbon::today();
+        $user = auth()->user();
 
-        // 1. KPI Totals
-        $totalPostulaciones = Postulacion::count();
-        $convocatoriasActivas = Convocatoria::whereDate('fecha_inicio', '<=', $hoy)
-            ->whereDate('fecha_cierre', '>=', $hoy)
-            ->count();
-        $postulacionesHoy = Postulacion::whereDate('created_at', $hoy)->count();
-        $pendientes = Postulacion::where('estado', 'enviada')->count();
+        $qTotal = Postulacion::query();
+        $qActivas = Convocatoria::whereDate('fecha_inicio', '<=', $hoy)->whereDate('fecha_cierre', '>=', $hoy);
+        $qHoy = Postulacion::whereDate('created_at', $hoy);
+        $qPendientes = Postulacion::where('estado', 'enviada');
+
+        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            $qTotal->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
+            $qActivas->whereHas('ofertas', fn($q) => $q->where('sede_id', $user->sede_id));
+            $qHoy->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
+            $qPendientes->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
+        }
+
+        $totalPostulaciones = $qTotal->count();
+        $convocatoriasActivas = $qActivas->count();
+        $postulacionesHoy = $qHoy->count();
+        $pendientes = $qPendientes->count();
 
         // 2. Por Sede (Distribución) - Solo sedes con convocatorias activas
-        $porSede = Sede::whereHas('ofertas.convocatoria', function($q) use ($hoy) {
+        $qSede = Sede::query();
+        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            $qSede->where('id', $user->sede_id);
+        }
+
+        $porSede = $qSede->whereHas('ofertas.convocatoria', function($q) use ($hoy) {
             $q->whereDate('fecha_inicio', '<=', $hoy)
               ->whereDate('fecha_cierre', '>=', $hoy);
         })
-        ->withCount(['postulaciones as postulaciones_count' => function($q) use ($hoy) {
-             // Opcional: ¿Contamos solo las de convocatorias activas?
-             // Por el comentario del usuario, parece que sí
+        ->withCount(['postulaciones as postulaciones_count' => function($q) use ($hoy, $user) {
              $q->whereHas('oferta.convocatoria', function($cq) use ($hoy) {
                  $cq->whereDate('fecha_inicio', '<=', $hoy)
                    ->whereDate('fecha_cierre', '>=', $hoy);
              });
+             if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+                 $q->whereHas('oferta', fn($oq) => $oq->where('sede_id', $user->sede_id));
+             }
         }])
         ->get(['id', 'nombre']);
 
         // 3. Cargos Postulados (Combinación Cargo - Sede) - Solo de convocatorias activas
-        $topOfertas = Oferta::whereHas('convocatoria', function($q) use ($hoy) {
+        $qOfertaStats = Oferta::query();
+        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            $qOfertaStats->where('sede_id', $user->sede_id);
+        }
+
+        $topOfertas = $qOfertaStats->whereHas('convocatoria', function($q) use ($hoy) {
             $q->whereDate('fecha_inicio', '<=', $hoy)
               ->whereDate('fecha_cierre', '>=', $hoy);
         })
@@ -53,7 +74,7 @@ class DashboardController extends Controller
         }])
         ->with(['cargo:id,nombre', 'sede:id,nombre'])
         ->orderBy('postulaciones_count', 'desc')
-        ->take(10) // Tomamos un poco más para que se vea variado
+        ->take(10)
         ->get();
 
         $cargosPostulados = $topOfertas->map(function($oferta) {
@@ -64,14 +85,24 @@ class DashboardController extends Controller
         });
 
         // 4. Próximos Cierres (Próximos 7 días)
-        $proximosCierres = Convocatoria::whereDate('fecha_cierre', '>=', $hoy)
+        $qCierres = Convocatoria::query();
+        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            $qCierres->whereHas('ofertas', fn($q) => $q->where('sede_id', $user->sede_id));
+        }
+
+        $proximosCierres = $qCierres->whereDate('fecha_cierre', '>=', $hoy)
             ->whereDate('fecha_cierre', '<=', $hoy->copy()->addDays(7))
             ->orderBy('fecha_cierre', 'asc')
             ->take(5)
             ->get();
 
         // 5. Actividad Reciente
-        $actividadReciente = Postulacion::with(['postulante:id,nombres,apellidos', 'oferta.cargo:id,nombre', 'oferta.sede:id,nombre'])
+        $qReciente = Postulacion::query();
+        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            $qReciente->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
+        }
+
+        $actividadReciente = $qReciente->with(['postulante:id,nombres,apellidos', 'oferta.cargo:id,nombre', 'oferta.sede:id,nombre'])
             ->latest()
             ->take(10)
             ->get();

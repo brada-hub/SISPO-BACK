@@ -17,7 +17,15 @@ class PostulacionController extends Controller
 {
     public function index(Request $request)
     {
+        $user = auth()->user();
         $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'oferta.convocatoria', 'evaluacion']);
+
+        // Filter by Sede if the user is not an Admin
+        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            $query->whereHas('oferta', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
 
         if ($request->has('convocatoria_id')) {
             $query->whereHas('oferta', function($q) use ($request) {

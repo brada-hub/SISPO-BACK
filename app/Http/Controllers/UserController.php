@@ -10,17 +10,19 @@ class UserController extends Controller
 {
     public function index()
     {
-        return User::with('rol')->get();
+        return User::with(['rol', 'sede'])->get();
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'rol_id' => 'required|exists:roles,id',
+            'sede_id' => 'nullable|exists:sedes,id',
             'nombres' => 'required|string|max:255',
             'apellidos' => 'required|string|max:255',
             'ci' => 'required|string|unique:users,ci',
             'activo' => 'boolean',
+            'permisos' => 'nullable|array',
         ]);
 
         // La contraseña por defecto es el CI
@@ -34,14 +36,16 @@ class UserController extends Controller
     {
         $validated = $request->validate([
             'rol_id' => 'required|exists:roles,id',
+            'sede_id' => 'nullable|exists:sedes,id',
             'nombres' => 'required|string|max:255',
             'apellidos' => 'required|string|max:255',
             'ci' => 'required|string|unique:users,ci,' . $usuario->id,
             'activo' => 'boolean',
+            'permisos' => 'nullable|array',
         ]);
 
         $usuario->update($validated);
-        return $usuario;
+        return $usuario->load(['rol', 'sede']);
     }
 
     public function changePassword(Request $request)

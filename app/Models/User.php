@@ -21,12 +21,14 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'rol_id',
+        'sede_id',
         'nombres',
         'apellidos',
         'ci',
         'password',
         'activo',
         'must_change_password',
+        'permisos',
     ];
 
     /**
@@ -49,11 +51,17 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'must_change_password' => 'boolean',
+            'permisos' => 'array',
         ];
     }
 
     public function rol()
     {
         return $this->belongsTo(Rol::class);
+    }
+
+    public function sede()
+    {
+        return $this->belongsTo(Sede::class);
     }
 }
