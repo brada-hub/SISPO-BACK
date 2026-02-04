@@ -50,7 +50,16 @@ class PostulacionController extends Controller
 
     public function show($id)
     {
-        return Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'evaluacion'])->findOrFail($id);
+        $user = auth()->user();
+        $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'evaluacion']);
+
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->whereHas('oferta', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        return $query->findOrFail($id);
     }
 
     public function updateStatus(Request $request, $id)
@@ -59,7 +68,16 @@ class PostulacionController extends Controller
             'estado' => 'required|in:enviada,en_revision,validada,observada,rechazada'
         ]);
 
-        $postulacion = Postulacion::findOrFail($id);
+        $user = auth()->user();
+        $query = Postulacion::query();
+
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->whereHas('oferta', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        $postulacion = $query->findOrFail($id);
         $postulacion->estado = $validated['estado'];
         $postulacion->save();
 
@@ -72,14 +90,22 @@ class PostulacionController extends Controller
 
     public function expediente($id)
     {
-        $postulacion = Postulacion::with([
+        $user = auth()->user();
+        $query = Postulacion::with([
             'postulante.meritos.tipoDocumento',
             'postulante.meritos.archivos',
             'oferta.cargo',
             'oferta.sede',
             'oferta.convocatoria'
-        ])->findOrFail($id);
+        ]);
 
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->whereHas('oferta', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        $postulacion = $query->findOrFail($id);
         return response()->json($postulacion);
     }
 
@@ -91,9 +117,13 @@ class PostulacionController extends Controller
             }
 
             $convocatoria = Convocatoria::findOrFail($convocatoriaId);
+            $user = auth()->user();
             $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'evaluacion'])
-                ->whereHas('oferta', function($q) use ($convocatoriaId) {
+                ->whereHas('oferta', function($q) use ($convocatoriaId, $user) {
                     $q->where('convocatoria_id', $convocatoriaId);
+                    if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+                        $q->where('sede_id', $user->sede_id);
+                    }
                 });
 
             // Apply Filters
@@ -262,7 +292,16 @@ class PostulacionController extends Controller
     private function exportBasic()
     {
         try {
-            $postulaciones = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede'])->get();
+            $user = auth()->user();
+            $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede']);
+
+            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+                $query->whereHas('oferta', function($q) use ($user) {
+                    $q->where('sede_id', $user->sede_id);
+                });
+            }
+
+            $postulaciones = $query->get();
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
 

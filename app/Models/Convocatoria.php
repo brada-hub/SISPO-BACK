@@ -10,6 +10,7 @@ class Convocatoria extends Model
         'titulo',
         'codigo_interno',
         'descripcion',
+        'contenido_detalle',
         'fecha_inicio',
         'fecha_cierre',
         'hora_limite',

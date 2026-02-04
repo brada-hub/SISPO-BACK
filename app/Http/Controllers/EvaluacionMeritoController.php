@@ -10,6 +10,20 @@ class EvaluacionMeritoController extends Controller
 {
     public function showByPostulacion($postulacionId)
     {
+        $user = auth()->user();
+        $query = \App\Models\Postulacion::query();
+
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->whereHas('oferta', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        // Check if user has access to this postulation
+        if (!$query->where('id', $postulacionId)->exists()) {
+            return response()->json(['message' => 'No tiene acceso a este expediente'], 403);
+        }
+
         $evaluacion = EvaluacionPostulacion::where('postulacion_id', $postulacionId)->first();
 
         if (!$evaluacion) {
@@ -33,6 +47,17 @@ class EvaluacionMeritoController extends Controller
             'pretension_salarial' => 'nullable|numeric',
         ]);
 
+        $user = auth()->user();
+        $query = \App\Models\Postulacion::query();
+
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->whereHas('oferta', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        $postulacion = $query->findOrFail($validated['postulacion_id']);
+
         $evaluacion = EvaluacionPostulacion::updateOrCreate(
             ['postulacion_id' => $validated['postulacion_id']],
             [
@@ -48,7 +73,6 @@ class EvaluacionMeritoController extends Controller
         );
 
         // Update postulation status to en_revision if it was 'enviada'
-        $postulacion = \App\Models\Postulacion::find($validated['postulacion_id']);
         if ($postulacion->estado === 'enviada') {
             $postulacion->estado = 'en_revision';
         }

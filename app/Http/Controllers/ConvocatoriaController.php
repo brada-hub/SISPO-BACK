@@ -11,7 +11,22 @@ class ConvocatoriaController extends Controller
 {
     public function index()
     {
-        return Convocatoria::with(['ofertas.sede', 'ofertas.cargo'])->get();
+        $user = auth()->user();
+        $query = Convocatoria::query();
+
+        // Si el usuario no es admin y tiene sede asignada, filtrar convocatorias
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->whereHas('ofertas', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        return $query->with(['ofertas' => function($q) use ($user) {
+            if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+                $q->where('sede_id', $user->sede_id);
+            }
+            $q->with(['sede', 'cargo']);
+        }])->get();
     }
 
     /**
@@ -33,6 +48,7 @@ class ConvocatoriaController extends Controller
             'titulo' => 'required|string|max:255',
             'codigo_interno' => 'nullable|string|max:50',
             'descripcion' => 'nullable|string',
+            'contenido_detalle' => 'nullable|string',
             'fecha_inicio' => 'required|date',
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
             'hora_limite' => 'nullable',
@@ -49,6 +65,7 @@ class ConvocatoriaController extends Controller
                 'titulo' => $validated['titulo'],
                 'codigo_interno' => $validated['codigo_interno'],
                 'descripcion' => $validated['descripcion'],
+                'contenido_detalle' => $validated['contenido_detalle'] ?? null,
                 'fecha_inicio' => $validated['fecha_inicio'],
                 'fecha_cierre' => $validated['fecha_cierre'],
                 'hora_limite' => $validated['hora_limite'],
@@ -70,9 +87,25 @@ class ConvocatoriaController extends Controller
         });
     }
 
-    public function show(Convocatoria $convocatoria)
+    public function show($id)
     {
-        return $convocatoria->load(['ofertas.sede', 'ofertas.cargo']);
+        $user = auth()->user();
+        $query = Convocatoria::query();
+
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->whereHas('ofertas', function($q) use ($user) {
+                $q->where('sede_id', $user->sede_id);
+            });
+        }
+
+        $convocatoria = $query->findOrFail($id);
+
+        return $convocatoria->load(['ofertas' => function($q) use ($user) {
+            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+                $q->where('sede_id', $user->sede_id);
+            }
+            $q->with(['sede', 'cargo']);
+        }]);
     }
 
     public function update(Request $request, Convocatoria $convocatoria)
@@ -81,6 +114,7 @@ class ConvocatoriaController extends Controller
             'titulo' => 'required|string|max:255',
             'codigo_interno' => 'nullable|string|max:50',
             'descripcion' => 'nullable|string',
+            'contenido_detalle' => 'nullable|string',
             'fecha_inicio' => 'required|date',
             'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
             'hora_limite' => 'nullable',
@@ -97,6 +131,7 @@ class ConvocatoriaController extends Controller
                 'titulo' => $validated['titulo'],
                 'codigo_interno' => $validated['codigo_interno'],
                 'descripcion' => $validated['descripcion'],
+                'contenido_detalle' => $validated['contenido_detalle'] ?? null,
                 'fecha_inicio' => $validated['fecha_inicio'],
                 'fecha_cierre' => $validated['fecha_cierre'],
                 'hora_limite' => $validated['hora_limite'],
@@ -126,11 +161,22 @@ class ConvocatoriaController extends Controller
         return response()->noContent();
     }
 
+    /**
+     * Public endpoint to get convocatoria details for the landing page
+     */
+    public function showPublic($id)
+    {
+        $convocatoria = Convocatoria::with(['ofertas.sede', 'ofertas.cargo'])
+            ->findOrFail($id);
+
+        return response()->json($convocatoria);
+    }
+
     public function convocatoriasConPostulantes()
     {
         $user = auth()->user();
         $query = Convocatoria::withCount(['postulaciones' => function($q) use ($user) {
-            if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
                 $q->whereHas('oferta', function($oq) use ($user) {
                     $oq->where('sede_id', $user->sede_id);
                 });
@@ -138,14 +184,14 @@ class ConvocatoriaController extends Controller
         }]);
 
         // Si el usuario es limitado, solo mostrar convocatorias que tienen ofertas en su sede
-        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
             $query->whereHas('ofertas', function($q) use ($user) {
                 $q->where('sede_id', $user->sede_id);
             });
         }
 
         return $query->with(['ofertas' => function($q) use ($user) {
-            if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
+            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
                 $q->where('sede_id', $user->sede_id);
             }
             $q->with('sede');

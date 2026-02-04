@@ -139,6 +139,16 @@ class ImportController extends Controller
                         continue;
                     }
 
+                    // Security: Filter by sede if the user is not an administrator
+                    $user = auth()->user();
+                    if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+                        if ($sede->id !== $user->sede_id) {
+                            DB::rollBack();
+                            // We don't increment imported, just skip or log
+                            continue;
+                        }
+                    }
+
                     $cargo = Cargo::firstOrCreate(['nombre' => strtoupper($cargoNombre)]);
 
                     // 2. Oferta

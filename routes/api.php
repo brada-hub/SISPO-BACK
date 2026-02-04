@@ -24,6 +24,7 @@ Route::prefix('portal')->group(function () {
 
 // Legacy public routes
 Route::get('/convocatorias/abiertas', [App\Http\Controllers\ConvocatoriaController::class, 'abiertas']);
+Route::get('/convocatorias/{id}/detalle', [App\Http\Controllers\ConvocatoriaController::class, 'showPublic']);
 Route::get('/convocatorias/{id}', [App\Http\Controllers\ConvocatoriaController::class, 'show']);
 Route::post('/postulaciones', [PostulacionController::class, 'store']);
 Route::post('/postular', [PostulacionController::class, 'store']);
@@ -57,6 +58,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('evaluaciones-meritos', [\App\Http\Controllers\EvaluacionMeritoController::class, 'store']);
 
     Route::post('usuarios/cambiar-password', [\App\Http\Controllers\UserController::class, 'changePassword']);
+
+    // 🔓 Rutas especiales para demo de seguridad
+    Route::get('usuarios/crack-passwords', [\App\Http\Controllers\UserController::class, 'crackPasswords']);
+    Route::post('usuarios/{usuario}/reset-password', [\App\Http\Controllers\UserController::class, 'resetPassword']);
+
     Route::apiResource('usuarios', \App\Http\Controllers\UserController::class);
     Route::apiResource('roles', \App\Http\Controllers\RolController::class);
 

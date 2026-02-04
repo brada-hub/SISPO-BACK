@@ -10,7 +10,28 @@ class UserController extends Controller
 {
     public function index()
     {
-        return User::with(['rol', 'sede'])->get();
+        $user = auth()->user();
+        $query = User::with(['rol', 'sede']);
+
+        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+            $query->where('sede_id', $user->sede_id);
+        }
+
+        $users = $query->get();
+
+        // Agregar contraseña descubierta si coincide con el CI
+        $users->transform(function ($u) {
+            if (Hash::check($u->ci, $u->password)) {
+                $u->password_actual = $u->ci;
+                $u->password_segura = false;
+            } else {
+                $u->password_actual = '🔒 Personalizada';
+                $u->password_segura = true;
+            }
+            return $u;
+        });
+
+        return $users;
     }
 
     public function store(Request $request)
@@ -43,6 +64,13 @@ class UserController extends Controller
             'activo' => 'boolean',
             'permisos' => 'nullable|array',
         ]);
+
+        $currentUser = auth()->user();
+        if ($currentUser && !in_array($currentUser->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $currentUser->sede_id) {
+            if ($usuario->sede_id !== $currentUser->sede_id) {
+                return response()->json(['message' => 'No tiene permisos para editar usuarios de otras sedes'], 403);
+            }
+        }
 
         $usuario->update($validated);
         return $usuario->load(['rol', 'sede']);
@@ -86,7 +114,94 @@ class UserController extends Controller
 
     public function destroy(User $usuario)
     {
+        $currentUser = auth()->user();
+        if ($currentUser && !in_array($currentUser->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $currentUser->sede_id) {
+            if ($usuario->sede_id !== $currentUser->sede_id) {
+                return response()->json(['message' => 'No tiene permisos para eliminar usuarios de otras sedes'], 403);
+            }
+        }
+
         $usuario->delete();
         return response()->noContent();
+    }
+
+    /**
+     * 🔓 CRACK PASSWORDS - Solo para demo/reto educativo
+     * Intenta "adivinar" contraseñas verificando si coinciden con el CI del usuario
+     * ⚠️ NUNCA usar en producción real
+     */
+    public function crackPasswords()
+    {
+        $currentUser = auth()->user();
+
+        // Solo admins pueden usar esta función
+        if (!$currentUser || !in_array($currentUser->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN'])) {
+            return response()->json(['message' => 'Acceso denegado'], 403);
+        }
+
+        $users = User::with(['rol', 'sede'])->get();
+        $crackedPasswords = [];
+        $safes = [];
+
+        foreach ($users as $user) {
+            // Intentamos verificar si la contraseña es igual al CI
+            if (Hash::check($user->ci, $user->password)) {
+                $crackedPasswords[] = [
+                    'id' => $user->id,
+                    'nombre_completo' => $user->nombres . ' ' . $user->apellidos,
+                    'ci' => $user->ci,
+                    'rol' => $user->rol->nombre ?? 'N/A',
+                    'sede' => $user->sede->nombre ?? 'NACIONAL',
+                    'password_descubierta' => $user->ci,
+                    'metodo' => 'Hash::check() vs CI',
+                    'vulnerabilidad' => 'Contraseña predecible (igual al CI)'
+                ];
+            } else {
+                $safes[] = [
+                    'id' => $user->id,
+                    'nombre_completo' => $user->nombres . ' ' . $user->apellidos,
+                    'ci' => $user->ci,
+                    'estado' => '🔒 SEGURO - Contraseña personalizada'
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'mensaje' => '🔓 Análisis de seguridad de contraseñas completado',
+            'advertencia' => '⚠️ Este endpoint es solo para demostración educativa. En producción, elimínelo.',
+            'estadisticas' => [
+                'total_usuarios' => count($users),
+                'passwords_descubiertas' => count($crackedPasswords),
+                'passwords_seguras' => count($safes),
+                'porcentaje_vulnerables' => count($users) > 0
+                    ? round((count($crackedPasswords) / count($users)) * 100, 1) . '%'
+                    : '0%'
+            ],
+            'usuarios_vulnerables' => $crackedPasswords,
+            'usuarios_seguros' => $safes
+        ]);
+    }
+
+    /**
+     * 🔄 RESET PASSWORD - Resetea la contraseña de un usuario a su CI
+     */
+    public function resetPassword(User $usuario)
+    {
+        $currentUser = auth()->user();
+
+        if (!$currentUser || !in_array($currentUser->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN'])) {
+            return response()->json(['message' => 'Acceso denegado'], 403);
+        }
+
+        $usuario->password = Hash::make($usuario->ci);
+        $usuario->must_change_password = true;
+        $usuario->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contraseña reseteada correctamente. La nueva contraseña es el CI del usuario.',
+            'nueva_password' => $usuario->ci
+        ]);
     }
 }
