@@ -20,6 +20,10 @@ class SedeController extends Controller
             'sigla' => 'nullable|string|max:10',
         ]);
 
+        if (isset($validated['sigla'])) {
+            $validated['abreviacion'] = $validated['sigla'];
+        }
+
         return Sede::create($validated);
     }
 
@@ -35,6 +39,10 @@ class SedeController extends Controller
             'departamento' => 'nullable|string|max:255',
             'sigla' => 'nullable|string|max:10',
         ]);
+
+        if (isset($validated['sigla'])) {
+            $validated['abreviacion'] = $validated['sigla'];
+        }
 
         $sede->update($validated);
         return $sede;

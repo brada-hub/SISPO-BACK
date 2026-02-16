@@ -8,6 +8,14 @@ use App\Http\Controllers\PortalController;
 // =====================
 // RUTAS PÚBLICAS (PORTAL)
 // =====================
+Route::get('/test-db', function() {
+    try {
+        $users = \App\Models\User::take(1)->get();
+        return response()->json(['success' => true, 'data' => $users]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+    }
+});
 Route::prefix('portal')->group(function () {
     // Get active offers grouped by Sede
     Route::get('/ofertas-activas', [PortalController::class, 'ofertasActivas']);
@@ -30,9 +38,11 @@ Route::post('/postulaciones', [PostulacionController::class, 'store']);
 Route::post('/postular', [PostulacionController::class, 'store']);
 
 // Auth Routes
-Route::post('/login', [App\Http\Controllers\AuthController::class, 'login']);
+Route::post('/login', [App\Http\Controllers\Api\AuthController::class, 'login']);
+Route::get('/auth/google/redirect', [App\Http\Controllers\Api\AuthController::class, 'redirectToGoogle']);
+Route::get('/auth/google/callback', [App\Http\Controllers\Api\AuthController::class, 'handleGoogleCallback']);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [App\Http\Controllers\AuthController::class, 'logout']);
     Route::get('/user', function (Request $request) {
         return $request->user()->load('rol'); // Add load('rol') for frontend check
@@ -59,12 +69,20 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('usuarios/cambiar-password', [\App\Http\Controllers\UserController::class, 'changePassword']);
 
-    // 🔓 Rutas especiales para demo de seguridad
-    Route::get('usuarios/crack-passwords', [\App\Http\Controllers\UserController::class, 'crackPasswords']);
+    // 🔓 Rutas especiales para demo
+    // Usuarios
+    Route::get('usuarios', [\App\Http\Controllers\UserController::class, 'index']);
+    Route::post('usuarios', [\App\Http\Controllers\UserController::class, 'store']);
+    Route::put('usuarios/{usuario}', [\App\Http\Controllers\UserController::class, 'update']);
+    Route::delete('usuarios/{usuario}', [\App\Http\Controllers\UserController::class, 'destroy']);
+    Route::get('usuarios/{usuario}/permissions', [\App\Http\Controllers\UserController::class, 'getPermissions']);
+    Route::post('usuarios/{usuario}/permissions', [\App\Http\Controllers\UserController::class, 'syncPermissions']);
     Route::post('usuarios/{usuario}/reset-password', [\App\Http\Controllers\UserController::class, 'resetPassword']);
-
-    Route::apiResource('usuarios', \App\Http\Controllers\UserController::class);
+    Route::get('usuarios/security-analysis', [\App\Http\Controllers\UserController::class, 'crackPasswords']);
+    Route::post('importar-usuarios-legacy', [\App\Http\Controllers\UserController::class, 'importLegacyUsers']);
     Route::apiResource('roles', \App\Http\Controllers\RolController::class);
+    Route::get('roles/{rol}/permissions', [\App\Http\Controllers\RolController::class, 'getPermissions']);
+    Route::post('roles/{rol}/permissions', [\App\Http\Controllers\RolController::class, 'syncPermissions']);
 
     // Ruta de importación
     Route::post('importar-excel', [\App\Http\Controllers\ImportController::class, 'importExcel']);

@@ -6,16 +6,34 @@ use Illuminate\Database\Eloquent\Model;
 
 class Rol extends Model
 {
+    protected $connection = 'core';
     protected $table = 'roles';
 
-    protected $fillable = ['nombre', 'descripcion', 'activo'];
+    protected $fillable = ['name', 'description', 'guard_name', 'system_id', 'activo'];
 
     protected $casts = [
         'activo' => 'boolean',
     ];
 
+    protected $appends = ['nombre', 'descripcion'];
+
+    public function getNombreAttribute()
+    {
+        return $this->name;
+    }
+
+    public function getDescripcionAttribute()
+    {
+        return $this->description;
+    }
+
     public function users()
     {
-        return $this->hasMany(User::class);
+        return $this->hasMany(User::class, 'rol_id');
+    }
+
+    public function permissions()
+    {
+        return $this->belongsToMany(Permission::class, 'role_has_permissions', 'role_id', 'permission_id');
     }
 }
