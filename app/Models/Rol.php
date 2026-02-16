@@ -9,22 +9,18 @@ class Rol extends Model
     protected $connection = 'core';
     protected $table = 'roles';
 
-    protected $fillable = ['name', 'description', 'guard_name', 'system_id', 'activo'];
+    protected $fillable = ['nombre', 'descripcion', 'guard_name', 'system_id', 'activo'];
 
     protected $casts = [
         'activo' => 'boolean',
     ];
 
-    protected $appends = ['nombre', 'descripcion'];
+    // Para compatibilidad con Spatie o Frontends que buscan 'name'
+    protected $appends = ['name'];
 
-    public function getNombreAttribute()
+    public function getNameAttribute()
     {
-        return $this->name;
-    }
-
-    public function getDescripcionAttribute()
-    {
-        return $this->description;
+        return $this->nombre;
     }
 
     public function users()
