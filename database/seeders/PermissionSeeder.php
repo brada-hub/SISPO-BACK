@@ -29,24 +29,24 @@ class PermissionSeeder extends Seeder
         // 3. DEFINICION DE PERMISOS
         $permissions = [
             // --- SISTEMA: SISPO (Postulaciones) ---
-            ['name' => 'dashboard', 'description' => 'Ver Dashboard Principal', 'system' => 'SISPO'],
-            ['name' => 'convocatorias', 'description' => 'Gestionar Convocatorias', 'system' => 'SISPO'],
-            ['name' => 'postulaciones', 'description' => 'Ver y Gestionar Postulaciones', 'system' => 'SISPO'],
-            ['name' => 'evaluaciones', 'description' => 'Evaluar Postulantes', 'system' => 'SISPO'],
-            ['name' => 'sedes', 'description' => 'Gestionar Sedes', 'system' => 'SISPO'],
-            ['name' => 'cargos', 'description' => 'Gestionar Cargos', 'system' => 'SISPO'],
-            ['name' => 'requisitos', 'description' => 'Gestionar Tipos de Documento', 'system' => 'SISPO'],
-            ['name' => 'usuarios', 'description' => 'Gestionar Usuarios', 'system' => 'SISPO'],
-            ['name' => 'roles', 'description' => 'Gestionar Roles y Permisos', 'system' => 'SISPO'],
+            ['name' => 'dashboard', 'description' => 'Ver Dashboard Principal', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'convocatorias', 'description' => 'Gestionar Convocatorias', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'postulaciones', 'description' => 'Ver y Gestionar Postulaciones', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'evaluaciones', 'description' => 'Evaluar Postulantes', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'sedes', 'description' => 'Gestionar Sedes', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'cargos', 'description' => 'Gestionar Cargos', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'requisitos', 'description' => 'Gestionar Tipos de Documento', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'usuarios', 'description' => 'Gestionar Usuarios', 'system' => 'SISTEMA DE POSTULACION'],
+            ['name' => 'roles', 'description' => 'Gestionar Roles y Permisos', 'system' => 'SISTEMA DE POSTULACION'],
 
             // --- SISTEMA: SIGVA (Vacaciones) ---
-            ['name' => 'vacaciones_dashboard', 'description' => 'Ver Dashboard de Vacaciones', 'system' => 'SISTEMA DE VACACIONES'],
-            ['name' => 'solicitudes', 'description' => 'Gestionar Solicitudes de Vacacion', 'system' => 'SISTEMA DE VACACIONES'],
-            ['name' => 'calendario', 'description' => 'Ver Calendario de Vacaciones', 'system' => 'SISTEMA DE VACACIONES'],
-            ['name' => 'empleados', 'description' => 'Gestionar Empleados', 'system' => 'SISTEMA DE VACACIONES'],
-            ['name' => 'feriados', 'description' => 'Gestionar Feriados', 'system' => 'SISTEMA DE VACACIONES'],
-            ['name' => 'reportes', 'description' => 'Generar Reportes de Vacacion', 'system' => 'SISTEMA DE VACACIONES'],
-            ['name' => 'documentacion', 'description' => 'Ver Documentacion', 'system' => 'SISTEMA DE VACACIONES'],
+            ['name' => 'vacaciones_dashboard', 'description' => 'Ver Dashboard de Vacaciones', 'system' => 'SISTEMA DE GESTIÓN DE VACACIONES'],
+            ['name' => 'solicitudes', 'description' => 'Gestionar Solicitudes de Vacacion', 'system' => 'SISTEMA DE GESTIÓN DE VACACIONES'],
+            ['name' => 'calendario', 'description' => 'Ver Calendario de Vacaciones', 'system' => 'SISTEMA DE GESTIÓN DE VACACIONES'],
+            ['name' => 'empleados', 'description' => 'Gestionar Empleados', 'system' => 'SISTEMA DE GESTIÓN DE VACACIONES'],
+            ['name' => 'feriados', 'description' => 'Gestionar Feriados', 'system' => 'SISTEMA DE GESTIÓN DE VACACIONES'],
+            ['name' => 'reportes', 'description' => 'Generar Reportes de Vacacion', 'system' => 'SISTEMA DE GESTIÓN DE VACACIONES'],
+            ['name' => 'documentacion', 'description' => 'Ver Documentacion', 'system' => 'SISTEMA DE GESTIÓN DE VACACIONES'],
         ];
 
         foreach ($permissions as $p) {
