@@ -2,22 +2,23 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Spatie\Permission\Models\Permission as SpatiePermission;
 
-class Permission extends Model
+class Permission extends SpatiePermission
 {
     protected $connection = 'core';
-    protected $table = 'permissions';
 
-    protected $fillable = ['name', 'guard_name', 'system_id', 'description'];
+    // Mantenemos los campos adicionales si son necesarios
+    protected $fillable = ['name', 'guard_name', 'system', 'description'];
 
-    public function roles()
+    // Spatie ya maneja la relación roles, pero si usas el modelo Rol personalizado:
+    public function roles(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
-        return $this->belongsToMany(Rol::class, 'role_has_permissions', 'permission_id', 'role_id');
-    }
-
-    public function systems()
-    {
-        return $this->belongsTo(System::class, 'system_id');
+        return $this->belongsToMany(
+            Rol::class,
+            config('permission.table_names.role_has_permissions'),
+            config('permission.column_names.permission_pivot_key') ?: 'permission_id',
+            config('permission.column_names.role_pivot_key') ?: 'role_id'
+        );
     }
 }

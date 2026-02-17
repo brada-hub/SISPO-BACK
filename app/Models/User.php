@@ -100,8 +100,7 @@ class User extends Authenticatable implements JWTSubject
      */
     public function getSystemsAttribute()
     {
-        $systemIds = $this->getAllPermissions()->pluck('system_id')->unique()->filter();
-        return System::whereIn('id', $systemIds)->get();
+        return $this->getAllPermissions()->pluck('system')->unique()->filter()->values()->toArray();
     }
 
     /**

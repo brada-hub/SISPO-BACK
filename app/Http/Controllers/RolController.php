@@ -55,7 +55,7 @@ class RolController extends Controller
      */
     public function getPermissions(Rol $rol)
     {
-        $allPermissions = \App\Models\Permission::with('systems')->get();
+        $allPermissions = \App\Models\Permission::all();
         $rolePermissionsIds = $rol->permissions()->pluck('permission_id')->toArray();
 
         return response()->json([

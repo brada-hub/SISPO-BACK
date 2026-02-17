@@ -15,13 +15,12 @@ class Rol extends Model
         'activo' => 'boolean',
     ];
 
-    // Eliminamos el append y el accessor conflictivo para usar la columna real 'name'
-    // protected $appends = ['name'];
+    protected $appends = ['name'];
 
-    // public function getNameAttribute()
-    // {
-    //     return $this->nombre;
-    // }
+    public function getNameAttribute()
+    {
+        return $this->attributes['name'] ?? $this->nombre;
+    }
 
     public function users()
     {

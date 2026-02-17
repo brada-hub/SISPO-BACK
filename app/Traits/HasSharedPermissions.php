@@ -33,7 +33,7 @@ trait HasSharedPermissions
     public function getPermissionsBySystem(string $systemName): Collection
     {
         return $this->getAllPermissions()->filter(function ($permission) use ($systemName) {
-            return $permission->systems && $permission->systems->name === $systemName;
+            return $permission->system === $systemName;
         });
     }
 

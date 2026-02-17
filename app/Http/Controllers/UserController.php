@@ -229,7 +229,7 @@ class UserController extends Controller
      */
     public function getPermissions(User $usuario)
     {
-        $allPermissions = \App\Models\Permission::with('systems')->get();
+        $allPermissions = \App\Models\Permission::all();
         $userIndividualPermissionsIds = $usuario->individualPermissions()->pluck('permission_id')->toArray();
         $rolePermissionsIds = $usuario->rol ? $usuario->rol->permissions()->pluck('permission_id')->toArray() : [];
 

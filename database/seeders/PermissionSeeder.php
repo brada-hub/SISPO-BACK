@@ -4,169 +4,66 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Permission;
-use App\Models\System;
 use App\Models\Rol;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
 class PermissionSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
-    public function run(): void
+    public function run()
     {
-        // 1. Obtener Sistemas
-        $sispo = System::firstOrCreate(['name' => 'SISPO'], ['display_name' => 'Sistema de Postulaciones', 'active' => true]);
-        $sigva = System::firstOrCreate(['name' => 'SIGVA'], ['display_name' => 'Sistema de Vacaciones', 'active' => true]);
+        $connection = 'core';
 
-        // 2. Definir Permisos por Sistema
+        // 1. LIMPIEZA DE PERMISOS REALMENTE ANTIGUOS
+        $obsolete = ['sigva_dashboard', 'reportes_sigva', 'kardex'];
+        Permission::whereIn('name', $obsolete)->delete();
+
+        // 2. ASEGURAR COLUMNAS PARA EL FRONTEND (En la conexion core)
+        if (!Schema::connection($connection)->hasColumn('permissions', 'system')) {
+            DB::connection($connection)->statement('ALTER TABLE permissions ADD COLUMN system VARCHAR(50) NULL AFTER guard_name');
+        }
+        if (!Schema::connection($connection)->hasColumn('permissions', 'description')) {
+            DB::connection($connection)->statement('ALTER TABLE permissions ADD COLUMN description VARCHAR(255) NULL AFTER name');
+        }
+
+        // 3. DEFINICION DE PERMISOS
         $permissions = [
-            // --- SISPO ---
-            [
-                'name' => 'dashboard',
-                'description' => 'Ver Dashboard Principal',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'convocatorias',
-                'description' => 'Gestionar Convocatorias',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'postulaciones',
-                'description' => 'Ver y Gestionar Postulaciones',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'evaluaciones',
-                'description' => 'Evaluar Postulantes',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'sedes',
-                'description' => 'Gestionar Sedes',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'cargos',
-                'description' => 'Gestionar Cargos',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'requisitos',
-                'description' => 'Gestionar Tipos de Documento',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'usuarios',
-                'description' => 'Gestionar Usuarios',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'roles',
-                'description' => 'Gestionar Roles y Permisos',
-                'system_id' => $sispo->id,
-                'guard_name' => 'api'
-            ],
+            // --- SISTEMA: SISPO (Postulaciones) ---
+            ['name' => 'dashboard', 'description' => 'Ver Dashboard Principal', 'system' => 'SISPO'],
+            ['name' => 'convocatorias', 'description' => 'Gestionar Convocatorias', 'system' => 'SISPO'],
+            ['name' => 'postulaciones', 'description' => 'Ver y Gestionar Postulaciones', 'system' => 'SISPO'],
+            ['name' => 'evaluaciones', 'description' => 'Evaluar Postulantes', 'system' => 'SISPO'],
+            ['name' => 'sedes', 'description' => 'Gestionar Sedes', 'system' => 'SISPO'],
+            ['name' => 'cargos', 'description' => 'Gestionar Cargos', 'system' => 'SISPO'],
+            ['name' => 'requisitos', 'description' => 'Gestionar Tipos de Documento', 'system' => 'SISPO'],
+            ['name' => 'usuarios', 'description' => 'Gestionar Usuarios', 'system' => 'SISPO'],
+            ['name' => 'roles', 'description' => 'Gestionar Roles y Permisos', 'system' => 'SISPO'],
 
-            // --- SIGVA ---
-            [
-                'name' => 'vacaciones_dashboard',
-                'description' => 'Ver Dashboard de Vacaciones',
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'solicitudes',
-                'description' => 'Gestionar Solicitudes de Vacación',
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'kardex',
-                'description' => 'Ver Kardex de Vacación',
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'calendario',
-                'description' => 'Ver Calendario de Vacaciones',
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'reportes',
-                'description' => 'Generar Reportes de Vacación',
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'config',
-                'description' => 'Configuración y Feriados',
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'documentacion',
-                'description' => 'Ver Documentación',
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
-            [
-                'name' => 'usuarios', // Reusamos el nombre pero vinculado a SIGVA si es necesario, o usamos el de SISPO.
-                'description' => 'Gestionar Empleados (SIGVA)', // Diferenciar del usuarios de SISPO
-                'system_id' => $sigva->id,
-                'guard_name' => 'api'
-            ],
+            // --- SISTEMA: SIGVA (Vacaciones) ---
+            ['name' => 'vacaciones_dashboard', 'description' => 'Ver Dashboard de Vacaciones', 'system' => 'SISTEMA DE VACACIONES'],
+            ['name' => 'solicitudes', 'description' => 'Gestionar Solicitudes de Vacacion', 'system' => 'SISTEMA DE VACACIONES'],
+            ['name' => 'calendario', 'description' => 'Ver Calendario de Vacaciones', 'system' => 'SISTEMA DE VACACIONES'],
+            ['name' => 'empleados', 'description' => 'Gestionar Empleados', 'system' => 'SISTEMA DE VACACIONES'],
+            ['name' => 'feriados', 'description' => 'Gestionar Feriados', 'system' => 'SISTEMA DE VACACIONES'],
+            ['name' => 'reportes', 'description' => 'Generar Reportes de Vacacion', 'system' => 'SISTEMA DE VACACIONES'],
+            ['name' => 'documentacion', 'description' => 'Ver Documentacion', 'system' => 'SISTEMA DE VACACIONES'],
         ];
 
-        foreach ($permissions as $perm) {
+        foreach ($permissions as $p) {
             Permission::updateOrCreate(
-                ['name' => $perm['name'], 'system_id' => $perm['system_id']],
-                $perm
+                ['name' => $p['name'], 'guard_name' => 'api'],
+                ['description' => $p['description'], 'system' => $p['system']]
             );
         }
 
-        // 3. Asignar TODO al Rol ADMIN / ADMINISTRADOR
-        $adminRoles = Rol::whereIn('name', ['ADMIN', 'ADMINISTRADOR', 'SUPER ADMIN'])->get();
+        // 4. ASIGNACION A ROLES ADMINISTRATIVOS
+        $column = Schema::connection($connection)->hasColumn('roles', 'name') ? 'name' : 'nombre';
+        $adminRoles = Rol::whereIn($column, ['ADMIN', 'ADMINISTRADOR', 'SUPER ADMIN'])->get();
         $allPermissions = Permission::all();
 
         foreach ($adminRoles as $role) {
-            // Sincronizar permisos (con tabla pivote role_has_permissions)
-            foreach ($allPermissions as $p) {
-                try {
-                    DB::connection('core')->table('role_has_permissions')->updateOrInsert([
-                        'role_id' => $role->id,
-                        'permission_id' => $p->id
-                    ]);
-                } catch (\Exception $e) {
-                    // Ignorar duplicados
-                }
-            }
-        }
-
-        // 4. Asignar Permisos Básicos a USUARIO
-        // ESTRATEGIA LIENZO EN BLANCO: No asignar nada por defecto. Se asignan manual en el Panel.
-        $userRoles = Rol::where('name', 'USUARIO')->get();
-        $userPerms = collect([]); // Lista vacía
-
-        foreach ($userRoles as $role) {
-            foreach ($userPerms as $p) {
-               try {
-                    DB::connection('core')->table('role_has_permissions')->updateOrInsert([
-                        'role_id' => $role->id,
-                        'permission_id' => $p->id
-                    ]);
-                } catch (\Exception $e) {}
-            }
+            // Sincronizamos los permisos (usando la relacion de Spatie en la conexion core)
+            $role->permissions()->sync($allPermissions->pluck('id'));
         }
     }
 }
