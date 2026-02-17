@@ -15,13 +15,13 @@ class Rol extends Model
         'activo' => 'boolean',
     ];
 
-    // Para compatibilidad con Spatie o Frontends que buscan 'name'
-    protected $appends = ['name'];
+    // Eliminamos el append y el accessor conflictivo para usar la columna real 'name'
+    // protected $appends = ['name'];
 
-    public function getNameAttribute()
-    {
-        return $this->nombre;
-    }
+    // public function getNameAttribute()
+    // {
+    //     return $this->nombre;
+    // }
 
     public function users()
     {

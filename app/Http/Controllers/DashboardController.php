@@ -23,7 +23,7 @@ class DashboardController extends Controller
         $qHoy = Postulacion::whereDate('created_at', $hoy);
         $qPendientes = Postulacion::where('estado', 'enviada');
 
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+        if ($user && !in_array($user->rol->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
             $qTotal->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
             $qActivas->whereHas('ofertas', fn($q) => $q->where('sede_id', $user->sede_id));
             $qHoy->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
@@ -37,7 +37,7 @@ class DashboardController extends Controller
 
         // 2. Por Sede (Distribución) - Solo sedes con convocatorias activas
         $qSede = Sede::query();
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+        if ($user && !in_array($user->rol->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
             $qSede->where('id', $user->sede_id);
         }
 
@@ -50,7 +50,7 @@ class DashboardController extends Controller
                  $cq->whereDate('fecha_inicio', '<=', $hoy)
                    ->whereDate('fecha_cierre', '>=', $hoy);
              });
-             if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+             if ($user && !in_array($user->rol->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
                  $q->whereHas('oferta', fn($oq) => $oq->where('sede_id', $user->sede_id));
              }
         }])
@@ -58,7 +58,7 @@ class DashboardController extends Controller
 
         // 3. Cargos Postulados (Combinación Cargo - Sede) - Solo de convocatorias activas
         $qOfertaStats = Oferta::query();
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+        if ($user && !in_array($user->rol->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
             $qOfertaStats->where('sede_id', $user->sede_id);
         }
 
@@ -86,7 +86,7 @@ class DashboardController extends Controller
 
         // 4. Próximos Cierres (Próximos 7 días)
         $qCierres = Convocatoria::query();
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+        if ($user && !in_array($user->rol->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
             $qCierres->whereHas('ofertas', fn($q) => $q->where('sede_id', $user->sede_id));
         }
 
@@ -98,7 +98,7 @@ class DashboardController extends Controller
 
         // 5. Actividad Reciente
         $qReciente = Postulacion::query();
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
+        if ($user && !in_array($user->rol->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
             $qReciente->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
         }
 

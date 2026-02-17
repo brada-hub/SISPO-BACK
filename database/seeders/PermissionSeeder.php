@@ -108,6 +108,24 @@ class PermissionSeeder extends Seeder
                 'system_id' => $sigva->id,
                 'guard_name' => 'api'
             ],
+            [
+                'name' => 'config',
+                'description' => 'Configuración y Feriados',
+                'system_id' => $sigva->id,
+                'guard_name' => 'api'
+            ],
+            [
+                'name' => 'documentacion',
+                'description' => 'Ver Documentación',
+                'system_id' => $sigva->id,
+                'guard_name' => 'api'
+            ],
+            [
+                'name' => 'usuarios', // Reusamos el nombre pero vinculado a SIGVA si es necesario, o usamos el de SISPO.
+                'description' => 'Gestionar Empleados (SIGVA)', // Diferenciar del usuarios de SISPO
+                'system_id' => $sigva->id,
+                'guard_name' => 'api'
+            ],
         ];
 
         foreach ($permissions as $perm) {
@@ -118,7 +136,7 @@ class PermissionSeeder extends Seeder
         }
 
         // 3. Asignar TODO al Rol ADMIN / ADMINISTRADOR
-        $adminRoles = Rol::whereIn('nombre', ['ADMIN', 'ADMINISTRADOR', 'SUPER ADMIN'])->get();
+        $adminRoles = Rol::whereIn('name', ['ADMIN', 'ADMINISTRADOR', 'SUPER ADMIN'])->get();
         $allPermissions = Permission::all();
 
         foreach ($adminRoles as $role) {
@@ -136,8 +154,9 @@ class PermissionSeeder extends Seeder
         }
 
         // 4. Asignar Permisos Básicos a USUARIO
-        $userRoles = Rol::where('nombre', 'USUARIO')->get();
-        $userPerms = Permission::whereIn('name', ['solicitudes', 'kardex'])->get();
+        // ESTRATEGIA LIENZO EN BLANCO: No asignar nada por defecto. Se asignan manual en el Panel.
+        $userRoles = Rol::where('name', 'USUARIO')->get();
+        $userPerms = collect([]); // Lista vacía
 
         foreach ($userRoles as $role) {
             foreach ($userPerms as $p) {
