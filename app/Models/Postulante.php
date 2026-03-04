@@ -6,7 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class Postulante extends Model
 {
+    protected $connection = 'mysql';
+
     protected $fillable = [
+        'user_id',
+        'clasificacion',
+        'sede_id',
         'ci',
         'ci_expedido',
         'ci_archivo_path',
@@ -15,6 +20,7 @@ class Postulante extends Model
         'nacionalidad',
         'direccion_domicilio',
         'email',
+        'email_institucional',
         'celular',
         'foto_perfil_path',
         'cv_pdf_path',
@@ -26,6 +32,16 @@ class Postulante extends Model
         'pretension_salarial',
         'porque_cargo',
     ];
+
+    public function sede()
+    {
+        return $this->belongsTo(Sede::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function meritos()
     {

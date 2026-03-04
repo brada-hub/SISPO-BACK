@@ -123,13 +123,13 @@ class AuthController extends Controller
             // REDIRECT TO FRONTEND
             // Codificamos el usuario para pasarlo limpio por URL
             $userData = base64_encode(json_encode($user));
-            $frontendUrl = env('FRONTEND_URL', 'http://localhost:9000/login');
+            $frontendUrl = env('FRONTEND_URL', 'https://sigeth.xpertiaplus.com/#/login');
 
             return redirect("$frontendUrl?token=$token&user=$userData");
 
         } catch (\Exception $e) {
             // En caso de error, también redirigimos al login con error
-            $frontendUrl = env('FRONTEND_URL', 'http://localhost:9000/login');
+            $frontendUrl = env('FRONTEND_URL', 'https://sigeth.xpertiaplus.com/#/login');
             return redirect("$frontendUrl?error=" . urlencode($e->getMessage()));
         }
     }

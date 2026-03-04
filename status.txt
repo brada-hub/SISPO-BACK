@@ -1,0 +1,31 @@
+
+  [90mMigration name[39m [90m...........[39m [90mBatch / Status[39m  
+  0001_01_01_000000_create_users_table  [1m[1][22m [32;1mRan[39;22m  
+  0001_01_01_000001_create_cache_table  [1m[1][22m [32;1mRan[39;22m  
+  0001_01_01_000002_create_jobs_table  [1m[1][22m [32;1mRan[39;22m  
+  2025_01_15_000000_create_sispo_tables  [1m[1][22m [32;1mRan[39;22m  
+  2026_01_16_052049_create_personal_access_tokens_table  [1m[1][22m [32;1mRan[39;22m  
+  2026_01_16_082123_add_departamento_to_sedes_table  [1m[1][22m [32;1mRan[39;22m  
+  2026_01_16_083714_add_extra_fields_to_postulantes_table  [1m[1][22m [32;1mRan[39;22m  
+  2026_01_17_010216_add_siglas_and_codigo_interno_to_tables  [1m[1][22m [32;1mRan[39;22m  
+  2026_01_17_021428_add_requisitos_afiche_to_convocatorias_table  [1m[1][22m [32;1mRan[39;22m  
+  2026_01_18_133017_add_extra_fields_to_postulantes_table  [1m[2][22m [32;1mRan[39;22m  
+  2026_01_18_133018_add_salary_and_motivation_to_postulantes_table  [1m[2][22m [32;1mRan[39;22m  
+  2026_01_18_143520_move_salary_and_motivation_to_postulaciones  [1m[2][22m [32;1mRan[39;22m  
+  2026_01_21_013319_create_evaluacion_postulacions_table  [1m[3][22m [32;1mRan[39;22m  
+  2026_01_25_200226_add_requisitos_opcionales_to_convocatorias_table  [1m[4][22m [32;1mRan[39;22m  
+  2026_01_29_202345_add_sede_id_to_users_table  [1m[5][22m [32;1mRan[39;22m  
+  2026_01_29_204749_add_permisos_to_users_table  [1m[5][22m [32;1mRan[39;22m  
+  2026_02_04_122626_add_contenido_detalle_to_convocatorias_table  [1m[6][22m [32;1mRan[39;22m  
+  2026_02_12_024951_add_email_and_google_id_to_users_table  [1m[7][22m [32;1mRan[39;22m  
+  2026_02_12_025514_make_ci_nullable_in_users_table  [1m[7][22m [32;1mRan[39;22m  
+  2026_02_16_000000_create_core_tables  [1m[999][22m [32;1mRan[39;22m  
+  2026_02_16_174954_make_email_nullable_in_users_table  [1m[1000][22m [32;1mRan[39;22m  
+  2026_02_17_014529_create_permission_tables  [1m[1001][22m [32;1mRan[39;22m  
+  2026_02_18_163634_add_user_id_to_postulantes_table  [1m[1002][22m [32;1mRan[39;22m  
+  2026_02_18_191035_add_system_id_to_permissions  [1m[1002][22m [32;1mRan[39;22m  
+  2026_02_19_000001_add_sede_id_to_postulantes_table  [1m[1002][22m [32;1mRan[39;22m  
+  2026_02_19_113000_add_email_institucional_to_postulantes_table  [1m[1002][22m [32;1mRan[39;22m  
+  2026_02_19_120000_add_clasificacion_to_postulantes_table  [1m[1002][22m [32;1mRan[39;22m  
+  2026_02_20_000000_add_jurisdiccion_to_users_table  [1m[1003][22m [32;1mRan[39;22m  
+

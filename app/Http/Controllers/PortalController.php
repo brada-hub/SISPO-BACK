@@ -9,6 +9,7 @@ use App\Models\MeritoArchivo;
 use App\Models\Oferta;
 use App\Models\Convocatoria;
 use App\Models\TipoDocumento;
+use App\Models\Sede;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -282,6 +283,14 @@ class PortalController extends Controller
     }
 
     /**
+     * Get all active sedes for selection
+     */
+    public function sedes()
+    {
+        return response()->json(Sede::where('activo', true)->orderBy('nombre')->get());
+    }
+
+    /**
      * Check application status by CI
      */
     public function consultar($ci)
@@ -315,5 +324,175 @@ class PortalController extends Controller
                 ];
             })
         ]);
+    }
+
+    /**
+     * Verify if a postulante exists and check against email for "Double Key" security
+     */
+    public function verificarPostulante(Request $request)
+    {
+        $request->validate([
+            'ci' => 'required|string',
+            'email' => 'nullable|email'
+        ]);
+
+        $postulante = Postulante::where('ci', $request->ci)
+            ->with(['meritos.archivos'])
+            ->first();
+
+        if (!$postulante) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Cédula no registrada. Puede proceder con un nuevo registro.'
+            ]);
+        }
+
+        // If email is provided, check if it matches to grant "edit access" without login
+        if ($request->filled('email')) {
+            if (strtolower(trim($postulante->email)) === strtolower(trim($request->email))) {
+                return response()->json([
+                    'exists' => true,
+                    'verified' => true,
+                    'data' => $postulante,
+                    'message' => 'Identidad verificada. Cargando sus datos actuales...'
+                ]);
+            } else {
+                return response()->json([
+                    'exists' => true,
+                    'verified' => false,
+                    'message' => 'El correo electrónico no coincide con nuestro registro para esta Cédula.'
+                ], 403);
+            }
+        }
+
+        return response()->json([
+            'exists' => true,
+            'verified' => false,
+            'message' => 'Este CI ya está registrado. Ingrese su correo electrónico para editar sus datos.'
+        ]);
+    }
+
+    /**
+     * Get all document types for the "Direct Registration" form
+     */
+    public function tiposDocumentoGenerales()
+    {
+        return response()->json(TipoDocumento::orderBy('orden')->get());
+    }
+
+    /**
+     * Direct registration/update without requiring a full postulación or user login
+     */
+    public function registrarDirecto(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'ci' => 'required|string|max:20',
+                'ci_expedido' => 'nullable|string|max:10',
+                'nombres' => 'required|string|max:255',
+                'apellidos' => 'required|string|max:255',
+                'email' => 'required|email|max:255',
+                'email_institucional' => 'nullable|email|max:255',
+                'sede_id' => 'nullable|exists:core.sedes,id',
+                'celular' => 'nullable|string|max:20',
+                'nacionalidad' => 'nullable|string|max:50',
+                'direccion_domicilio' => 'nullable|string|max:500',
+                'clasificacion' => 'nullable|string|max:50',
+                'ref_personal_celular' => 'nullable|string|max:20',
+                'ref_personal_parentesco' => 'nullable|string|max:255',
+
+                // Files
+                'foto_perfil' => 'nullable|image|max:2048',
+                'ci_archivo' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                'cv_pdf' => 'nullable|file|mimes:pdf|max:2048',
+
+                // Merits
+                'meritos' => 'nullable|array',
+            ]);
+
+            return DB::transaction(function () use ($validated, $request) {
+                // 1. Update or Create Postulante
+                $postulante = Postulante::updateOrCreate(
+                    ['ci' => $validated['ci']],
+                    [
+                        'ci_expedido' => $validated['ci_expedido'] ?? null,
+                        'sede_id' => $validated['sede_id'] ?? null,
+                        'nombres' => $validated['nombres'],
+                        'apellidos' => $validated['apellidos'],
+                        'email' => $validated['email'],
+                        'email_institucional' => $validated['email_institucional'] ?? null,
+                        'celular' => $validated['celular'] ?? null,
+                        'nacionalidad' => $validated['nacionalidad'] ?? 'Boliviana',
+                        'direccion_domicilio' => $validated['direccion_domicilio'] ?? null,
+                        'clasificacion' => $validated['clasificacion'] ?? 'ADMINISTRATIVO',
+                        'ref_personal_celular' => $validated['ref_personal_celular'] ?? null,
+                        'ref_personal_parentesco' => $validated['ref_personal_parentesco'] ?? null,
+                    ]
+                );
+
+                // 2. Handle Files
+                if ($request->hasFile('foto_perfil')) {
+                    $postulante->foto_perfil_path = $request->file('foto_perfil')->store('postulantes/fotos', 'public');
+                }
+                if ($request->hasFile('ci_archivo')) {
+                    $postulante->ci_archivo_path = $request->file('ci_archivo')->store('postulantes/ci', 'public');
+                }
+                if ($request->hasFile('cv_pdf')) {
+                    $postulante->cv_pdf_path = $request->file('cv_pdf')->store('postulantes/cv', 'public');
+                }
+                $postulante->save();
+
+                // 3. Process Meritos
+                $meritosData = $request->input('meritos', []);
+                foreach ($meritosData as $index => $mData) {
+                    // Si viene con ID lo usamos, sino buscamos por duplicados de tipo si no permite multiples
+                    $item = PostulanteMerito::updateOrCreate(
+                        [
+                            'id' => $mData['id'] ?? null,
+                            'postulante_id' => $postulante->id,
+                            'tipo_documento_id' => $mData['tipo_documento_id'],
+                        ],
+                        [
+                            'respuestas' => is_string($mData['respuestas']) ? json_decode($mData['respuestas'], true) : ($mData['respuestas'] ?? []),
+                        ]
+                    );
+
+                    // Handle files for this merit
+                    $files = $request->file("meritos.{$index}.archivos");
+                    if ($files && is_array($files)) {
+                        foreach ($files as $configKey => $file) {
+                             if ($file instanceof \Illuminate\Http\UploadedFile) {
+                                 $path = $file->store("postulantes/{$postulante->id}/meritos", 'public');
+                                 $item->archivos()->updateOrCreate(
+                                     ['config_archivo_id' => $configKey],
+                                     ['archivo_path' => $path]
+                                 );
+                             }
+                        }
+                    }
+                }
+
+                // 4. Link user if it exists (staff registration)
+                if (!$postulante->user_id) {
+                    $user = \App\Models\User::where('ci', $postulante->ci)->first();
+                    if ($user) {
+                        $postulante->user_id = $user->id;
+                        $postulante->save();
+                    }
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Información registrada correctamente.',
+                    'postulante' => $postulante->fresh(['meritos.archivos', 'sede'])
+                ]);
+            });
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al guardar: ' . $e->getMessage()
+            ], 400);
+        }
     }
 }

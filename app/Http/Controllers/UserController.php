@@ -15,9 +15,13 @@ class UserController extends Controller
 
         $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
         $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN']);
+        $jurisdiccion = $currentUser->jurisdiccion ?? [];
 
-        if (!$isAdmin && $currentUser && $currentUser->sede_id) {
-            $query->where('sede_id', $currentUser->sede_id);
+        if (!$isAdmin) {
+            $allowedSedes = !empty($jurisdiccion) ? $jurisdiccion : ($currentUser->sede_id ? [$currentUser->sede_id] : []);
+            if (!empty($allowedSedes)) {
+                $query->whereIn('sede_id', $allowedSedes);
+            }
         }
 
         $users = $query->get();
@@ -47,6 +51,7 @@ class UserController extends Controller
             'apellido_materno' => 'nullable|string|max:255',
             'ci' => 'required|string|unique:core.users,ci',
             'activo' => 'boolean',
+            'jurisdiccion' => 'nullable|array',
         ]);
 
         // Calcular apellidos combinado para compatibilidad
@@ -69,6 +74,7 @@ class UserController extends Controller
             'apellido_materno' => 'nullable|string|max:255',
             'ci' => 'required|string|unique:core.users,ci,' . $usuario->id,
             'activo' => 'boolean',
+            'jurisdiccion' => 'nullable|array',
         ]);
 
         // Calcular apellidos combinado para compatibilidad
@@ -77,10 +83,12 @@ class UserController extends Controller
         $currentUser = auth()->user();
         $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
         $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN']);
+        $jurisdiccion = $currentUser->jurisdiccion ?? [];
 
-        if (!$isAdmin && $currentUser && $currentUser->sede_id) {
-            if ($usuario->sede_id !== $currentUser->sede_id) {
-                return response()->json(['message' => 'No tiene permisos para editar usuarios de otras sedes'], 403);
+        if (!$isAdmin) {
+            $allowedSedes = !empty($jurisdiccion) ? $jurisdiccion : ($currentUser->sede_id ? [$currentUser->sede_id] : []);
+            if (!empty($allowedSedes) && !in_array($usuario->sede_id, $allowedSedes)) {
+                return response()->json(['message' => 'No tiene permisos para editar usuarios de esta sede'], 403);
             }
         }
 
@@ -129,10 +137,12 @@ class UserController extends Controller
         $currentUser = auth()->user();
         $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
         $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN']);
+        $jurisdiccion = $currentUser->jurisdiccion ?? [];
 
-        if (!$isAdmin && $currentUser && $currentUser->sede_id) {
-            if ($usuario->sede_id !== $currentUser->sede_id) {
-                return response()->json(['message' => 'No tiene permisos para eliminar usuarios de otras sedes'], 403);
+        if (!$isAdmin) {
+            $allowedSedes = !empty($jurisdiccion) ? $jurisdiccion : ($currentUser->sede_id ? [$currentUser->sede_id] : []);
+            if (!empty($allowedSedes) && !in_array($usuario->sede_id, $allowedSedes)) {
+                return response()->json(['message' => 'No tiene permisos para eliminar usuarios de esta sede'], 403);
             }
         }
 

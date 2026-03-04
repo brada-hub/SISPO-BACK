@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Cargo extends Model
 {
+    protected $connection = 'mysql';
     protected $fillable = ['nombre', 'sigla'];
 
     public function ofertas()

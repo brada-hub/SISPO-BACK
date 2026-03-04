@@ -5,6 +5,7 @@ namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use App\Models\System;
 use App\Models\Sede;
@@ -14,7 +15,7 @@ use App\Traits\HasSharedPermissions;
 
 class User extends Authenticatable implements JWTSubject
 {
-    use Notifiable, HasSharedPermissions;
+    use HasApiTokens, Notifiable, HasSharedPermissions;
 
     protected $connection = 'core';
     protected $table = 'users';
@@ -37,6 +38,7 @@ class User extends Authenticatable implements JWTSubject
         'google_id',
         'activo',
         'must_change_password',
+        'jurisdiccion',
     ];
 
     /**
@@ -59,6 +61,7 @@ class User extends Authenticatable implements JWTSubject
         return [
             'password' => 'hashed',
             'must_change_password' => 'boolean',
+            'jurisdiccion' => 'array',
         ];
     }
 
@@ -101,6 +104,11 @@ class User extends Authenticatable implements JWTSubject
     public function getSystemsAttribute()
     {
         return $this->getAllPermissions()->pluck('system')->unique()->filter()->values()->toArray();
+    }
+
+    public function postulante()
+    {
+        return $this->hasOne(Postulante::class);
     }
 
     /**

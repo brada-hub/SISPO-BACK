@@ -28,6 +28,14 @@ Route::prefix('portal')->group(function () {
 
     // Check status by CI
     Route::get('/consultar/{ci}', [PortalController::class, 'consultar']);
+
+    // Verify identity for direct registration (CI + Email)
+    Route::post('/verificar', [PortalController::class, 'verificarPostulante']);
+
+    // Direct registration (Hoja de Vida)
+    Route::post('/registrar-directo', [PortalController::class, 'registrarDirecto']);
+    Route::get('/tipos-documento', [PortalController::class, 'tiposDocumentoGenerales']);
+    Route::get('/sedes', [PortalController::class, 'sedes']);
 });
 
 // Legacy public routes
@@ -86,4 +94,16 @@ Route::middleware('auth:api')->group(function () {
 
     // Ruta de importación
     Route::post('importar-excel', [\App\Http\Controllers\ImportController::class, 'importExcel']);
+
+    // =====================
+    // MI LEGAJO (ADMINISTRATIVOS)
+    // =====================
+    Route::get('mi-legajo', [\App\Http\Controllers\MiLegajoController::class, 'show']);
+    Route::post('mi-legajo', [\App\Http\Controllers\MiLegajoController::class, 'update']);
+
+    // =====================
+    // GESTIÓN DE EXPEDIENTES (RRHH)
+    // =====================
+    Route::get('expedientes', [\App\Http\Controllers\ExpedienteController::class, 'index']);
+    Route::get('expedientes/{id}', [\App\Http\Controllers\ExpedienteController::class, 'show']);
 });

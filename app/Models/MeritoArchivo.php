@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MeritoArchivo extends Model
 {
+    protected $connection = 'mysql';
     protected $table = 'merito_archivos';
 
     protected $fillable = [

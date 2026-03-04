@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Convocatoria extends Model
 {
+    protected $connection = 'mysql';
+
     protected $fillable = [
         'titulo',
         'codigo_interno',

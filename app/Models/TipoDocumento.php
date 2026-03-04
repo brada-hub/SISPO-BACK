@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class TipoDocumento extends Model
 {
+    protected $connection = 'mysql';
     protected $table = 'tipos_documento';
 
     protected $fillable = [
