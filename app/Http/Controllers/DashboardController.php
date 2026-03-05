@@ -36,25 +36,32 @@ class DashboardController extends Controller
         $pendientes = $qPendientes->count();
 
         // 2. Por Sede (Distribución) - Solo sedes con convocatorias activas
-        $qSede = Sede::query();
+        // NOTA: Sede usa conexión 'core' (sso_db) pero ofertas/postulaciones están en sispo_db.
+        // Se usa DB::table para evitar el problema de cross-connection.
+        $sedeQuery = DB::table('postulaciones')
+            ->join('ofertas', 'ofertas.id', '=', 'postulaciones.oferta_id')
+            ->join('convocatorias', 'convocatorias.id', '=', 'ofertas.convocatoria_id')
+            ->whereDate('convocatorias.fecha_inicio', '<=', $hoy)
+            ->whereDate('convocatorias.fecha_cierre', '>=', $hoy)
+            ->select('ofertas.sede_id', DB::raw('count(*) as postulaciones_count'))
+            ->groupBy('ofertas.sede_id');
+
         if ($user && !in_array($user->rol?->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $qSede->where('id', $user->sede_id);
+            $sedeQuery->where('ofertas.sede_id', $user->sede_id);
         }
 
-        $porSede = $qSede->whereHas('ofertas.convocatoria', function($q) use ($hoy) {
-            $q->whereDate('fecha_inicio', '<=', $hoy)
-              ->whereDate('fecha_cierre', '>=', $hoy);
-        })
-        ->withCount(['postulaciones as postulaciones_count' => function($q) use ($hoy, $user) {
-             $q->whereHas('oferta.convocatoria', function($cq) use ($hoy) {
-                 $cq->whereDate('fecha_inicio', '<=', $hoy)
-                   ->whereDate('fecha_cierre', '>=', $hoy);
-             });
-             if ($user && !in_array($user->rol?->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-                 $q->whereHas('oferta', fn($oq) => $oq->where('sede_id', $user->sede_id));
-             }
-        }])
-        ->get(['id', 'nombre']);
+        $conteosRaw = $sedeQuery->get();
+        $sedeIds = $conteosRaw->pluck('sede_id')->toArray();
+        $sedesInfo = Sede::whereIn('id', $sedeIds)->get(['id', 'nombre'])->keyBy('id');
+
+        $porSede = $conteosRaw->map(function($row) use ($sedesInfo) {
+            $sede = $sedesInfo[$row->sede_id] ?? null;
+            return [
+                'id' => $row->sede_id,
+                'nombre' => $sede?->nombre ?? 'Sede #' . $row->sede_id,
+                'postulaciones_count' => $row->postulaciones_count,
+            ];
+        });
 
         // 3. Cargos Postulados (Combinación Cargo - Sede) - Solo de convocatorias activas
         $qOfertaStats = Oferta::query();
