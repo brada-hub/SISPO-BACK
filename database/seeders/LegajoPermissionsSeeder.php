@@ -41,11 +41,11 @@ class LegajoPermissionsSeeder extends Seeder
         // 3. Create Role manually
         // Table 'roles' columns: name, guard_name, system_id, description, activo
         $roleName = 'Administrativo';
-        $role = DB::connection('core')->table('roles')->where('name', $roleName)->where('guard_name', $guardName)->first();
+        $role = DB::connection('core')->table('roles')->where('nombre', $roleName)->first();
 
         if (!$role) {
             $roleId = DB::connection('core')->table('roles')->insertGetId([
-                'name' => $roleName,
+                'nombre' => $roleName,
                 'guard_name' => $guardName,
                 'activo' => true,
                 'created_at' => now(),

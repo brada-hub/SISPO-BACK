@@ -37,7 +37,7 @@ class ExpedientesPermissionsSeeder extends Seeder
 
         // 3. Assign to ROLES
         $roles = DB::connection('core')->table('roles')
-            ->whereIn('name', ['Admin', 'Administrador', 'SuperAdmin'])
+            ->whereIn('nombre', ['Admin', 'Administrador', 'SuperAdmin'])
             ->get();
 
         foreach ($roles as $role) {
