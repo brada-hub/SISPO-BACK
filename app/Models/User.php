@@ -29,7 +29,6 @@ class User extends Authenticatable implements JWTSubject
         'rol_id',
         'sede_id',
         'nombres',
-        'apellidos',
         'apellido_paterno',
         'apellido_materno',
         'ci',
@@ -68,7 +67,12 @@ class User extends Authenticatable implements JWTSubject
     /**
      * The attributes that should be appended to arrays.
      */
-    protected $appends = ['permisos', 'systems'];
+    protected $appends = ['nombre_completo', 'permisos', 'systems'];
+
+    public function getNombreCompletoAttribute(): string
+    {
+        return trim("{$this->nombres} {$this->apellido_paterno} {$this->apellido_materno}");
+    }
 
     /**
      * Get merged permissions (from role + individual)

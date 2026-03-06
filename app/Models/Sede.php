@@ -8,7 +8,7 @@ class Sede extends Model
 {
     protected $connection = 'core';
     protected $table = 'sedes'; // Explicit table name
-    protected $fillable = ['nombre', 'departamento', 'sigla', 'abreviacion', 'direccion', 'activo']; // Added core fields
+    protected $fillable = ['nombre', 'departamento', 'sigla', 'activo']; // Adjusted core fields
 
     public function ofertas()
     {
