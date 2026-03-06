@@ -13,35 +13,22 @@ class LegajoPermissionsSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. Get SISPO system id directly from DB to avoid Model mismatch issues
-        $sispo = DB::connection('core')->table('systems')->where('name', 'SISPO')->first();
-
-        // Fallback if SISPO system doesn't exist (creates it safely)
-        if (!$sispo) {
-            $sispoId = DB::connection('core')->table('systems')->insertGetId([
-                'name' => 'SISPO',
-                'display_name' => 'Sistema de Postulaciones',
-                'active' => true,
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
-        } else {
-            $sispoId = $sispo->id;
-        }
+        // 1. Get SISPO application id directly from DB
+        $sispo = DB::connection('core')->table('applications')->where('key', 'sispo')->first();
+        $sispoId = $sispo ? $sispo->id : 1;
 
         $guardName = 'api';
         $permName = 'ver_mi_legajo';
 
         // 2. Create Permission manually to avoid Model $fillable issues
-        // Table 'permissions' columns: name, guard_name, system_id, description
-        $perm = DB::connection('core')->table('permissions')->where('name', $permName)->where('guard_name', $guardName)->first();
+        // Table 'permissions' columns: name, guard_name, application_id
+        $perm = DB::connection('core')->table('permissions')->where('name', $permName)->where('application_id', $sispoId)->first();
 
         if (!$perm) {
             $permId = DB::connection('core')->table('permissions')->insertGetId([
                 'name' => $permName,
                 'guard_name' => $guardName,
-                'system_id' => $sispoId,
-                'description' => 'Permite al usuario visualizar y editar su propio legajo personal.',
+                'application_id' => $sispoId,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
@@ -60,8 +47,6 @@ class LegajoPermissionsSeeder extends Seeder
             $roleId = DB::connection('core')->table('roles')->insertGetId([
                 'name' => $roleName,
                 'guard_name' => $guardName,
-                'system_id' => $sispoId,
-                'description' => 'Personal administrativo con acceso a su legajo',
                 'activo' => true,
                 'created_at' => now(),
                 'updated_at' => now()

@@ -10,7 +10,7 @@ class ExpedientesPermissionsSeeder extends Seeder
     public function run(): void
     {
         // 1. Get SISPO ID
-        $sispo = DB::connection('core')->table('systems')->where('name', 'SISPO')->first();
+        $sispo = DB::connection('core')->table('applications')->where('key', 'sispo')->first();
         $sispoId = $sispo ? $sispo->id : 1;
 
         // 2. Try simple insert for 'ver_todo_personal'
@@ -18,15 +18,14 @@ class ExpedientesPermissionsSeeder extends Seeder
         // Simpler approach: Check carefully
         $existing = DB::connection('core')->table('permissions')
             ->where('name', 'ver_todo_personal')
-            ->where('system_id', $sispoId)
+            ->where('application_id', $sispoId)
             ->first();
 
         if (!$existing) {
             $permId = DB::connection('core')->table('permissions')->insertGetId([
                 'name' => 'ver_todo_personal',
                 'guard_name' => 'api',
-                'system_id' => $sispoId,
-                'description' => 'Permite ver y gestionar expedientes de todo el personal.',
+                'application_id' => $sispoId,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
