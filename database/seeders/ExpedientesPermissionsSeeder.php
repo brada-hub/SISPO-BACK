@@ -52,9 +52,9 @@ class ExpedientesPermissionsSeeder extends Seeder
                     'permission_id' => $permId,
                     'role_id' => $role->id
                 ]);
-                $this->command->info("Asignado a rol: {$role->name}");
+                $this->command->info("Asignado a rol: {$role->nombre}");
             } else {
-                $this->command->info("Rol {$role->name} ya tenía el permiso.");
+                $this->command->info("Rol {$role->nombre} ya tenía el permiso.");
             }
         }
     }
