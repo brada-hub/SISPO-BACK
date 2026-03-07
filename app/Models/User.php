@@ -97,8 +97,8 @@ class User extends Authenticatable implements JWTSubject
      */
     public function userSystems()
     {
-        return $this->belongsToMany(System::class, 'user_systems', 'user_id', 'system_id')
-                    ->withPivot('role_id', 'activo')
+        return $this->belongsToMany(System::class, 'application_user', 'user_id', 'application_id')
+                    ->withPivot('role', 'permissions')
                     ->withTimestamps();
     }
 
