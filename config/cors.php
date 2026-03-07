@@ -18,8 +18,11 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
+        'https://postulacionesunitepc.xpertiaplus.com',
+        'https://sipost.xpertiaplus.com',
         'https://sispo.xpertiaplus.com',
         'https://sigeth.xpertiaplus.com',
+        'https://sigva.xpertiaplus.com',
         'http://localhost:9000',
         'http://localhost:9001',
         'http://localhost:9002',
