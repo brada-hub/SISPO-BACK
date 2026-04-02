@@ -16,9 +16,15 @@ use App\Traits\HasSharedPermissions;
 class User extends Authenticatable implements JWTSubject
 {
     use HasApiTokens, Notifiable, HasSharedPermissions;
+    
+    public function getMorphClass()
+    {
+        return 'user';
+    }
 
     protected $connection = 'core';
     protected $table = 'users';
+    protected $primaryKey = 'id_user';
 
     /**
      * The attributes that are mass assignable.
@@ -69,6 +75,8 @@ class User extends Authenticatable implements JWTSubject
      */
     protected $appends = ['nombre_completo', 'permisos', 'systems'];
 
+    protected $with = ['roles'];
+
     public function getNombreCompletoAttribute(): string
     {
         return trim("{$this->nombres} {$this->apellido_paterno} {$this->apellido_materno}");
@@ -79,17 +87,36 @@ class User extends Authenticatable implements JWTSubject
      */
     public function getPermisosAttribute(): array
     {
-        return $this->getAllPermissions()->pluck('name')->toArray();
+        return $this->getAllPermissions()->pluck('nombres')->values()->toArray();
     }
 
-    public function rol()
+    /**
+     * Relación con Roles (Many-to-Many como en SIGETH)
+     */
+    public function roles()
     {
-        return $this->belongsTo(Rol::class, 'rol_id');
+        return $this->belongsToMany(Rol::class, 'user_has_roles', 'user_id', 'role_id');
+    }
+
+    /**
+     * Get single role for backward compatibility
+     */
+    public function getRolAttribute()
+    {
+        return $this->roles->first();
     }
 
     public function sede()
     {
         return $this->belongsTo(Sede::class);
+    }
+
+    /**
+     * Relación con Persona (Shared in core)
+     */
+    public function persona()
+    {
+        return $this->belongsTo(Persona::class, 'id_persona', 'id_persona');
     }
 
     /**
@@ -133,7 +160,7 @@ class User extends Authenticatable implements JWTSubject
     public function getJWTCustomClaims()
     {
         return [
-            'rol_id' => $this->rol_id,
+            'id_rol' => $this->roles->first()?->id_rol,
             'ci' => $this->ci,
             'sede_id' => $this->sede_id,
         ];

@@ -6,8 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Sede extends Model
 {
-    protected $connection = 'core';
-    protected $table = 'sedes'; // Explicit table name
+    protected $table = 'sedes';
     protected $fillable = ['nombre', 'departamento', 'sigla', 'activo']; // Adjusted core fields
 
     public function ofertas()

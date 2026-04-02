@@ -3,6 +3,10 @@
 .env
 .env.backup
 .env.production
+_ide_helper.php
+_ide_helper.php.bak
+_ide_helper_models.php
+.phpstorm.meta.php
 .phpactor.json
 .phpunit.result.cache
 /.fleet

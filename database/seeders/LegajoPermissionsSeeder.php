@@ -14,6 +14,7 @@ class LegajoPermissionsSeeder extends Seeder
     public function run(): void
     {
         // 1. Get SISPO application id directly from DB
+        /** @var object|null $sispo */
         $sispo = DB::connection('core')->table('applications')->where('key', 'sispo')->first();
         $sispoId = $sispo ? $sispo->id : 1;
 

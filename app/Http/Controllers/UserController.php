@@ -57,11 +57,25 @@ class UserController extends Controller
         // Calcular apellidos combinado para compatibilidad
         $validated['apellidos'] = trim($validated['apellido_paterno'] . ' ' . ($validated['apellido_materno'] ?? ''));
 
-        // La contraseña por defecto es el CI
         $validated['password'] = Hash::make($validated['ci']);
         $validated['must_change_password'] = true;
 
-        return User::create($validated);
+        $user = User::create($validated);
+
+        // ========================================================
+        // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
+        // ========================================================
+        \App\Models\Persona::updateOrCreate(
+            ['ci' => $validated['ci']],
+            [
+                'nombres'          => $validated['nombres'],
+                'apellido_paterno' => $validated['apellido_paterno'],
+                'apellido_materno' => $validated['apellido_materno'] ?? '',
+            ]
+        );
+        // ========================================================
+
+        return $user;
     }
 
     public function update(Request $request, User $usuario)
@@ -93,6 +107,20 @@ class UserController extends Controller
         }
 
         $usuario->update($validated);
+
+        // ========================================================
+        // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
+        // ========================================================
+        \App\Models\Persona::updateOrCreate(
+            ['ci' => $validated['ci']],
+            [
+                'nombres'          => $validated['nombres'],
+                'apellido_paterno' => $validated['apellido_paterno'],
+                'apellido_materno' => $validated['apellido_materno'] ?? '',
+            ]
+        );
+        // ========================================================
+
         return $usuario->load(['rol', 'sede']);
     }
 

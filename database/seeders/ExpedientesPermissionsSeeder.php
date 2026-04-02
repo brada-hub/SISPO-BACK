@@ -10,6 +10,7 @@ class ExpedientesPermissionsSeeder extends Seeder
     public function run(): void
     {
         // 1. Get SISPO ID
+        /** @var object|null $sispo */
         $sispo = DB::connection('core')->table('applications')->where('key', 'sispo')->first();
         $sispoId = $sispo ? $sispo->id : 1;
 

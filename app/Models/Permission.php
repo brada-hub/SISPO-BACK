@@ -2,46 +2,42 @@
 
 namespace App\Models;
 
-use Spatie\Permission\Models\Permission as SpatiePermission;
+use Illuminate\Database\Eloquent\Model;
 
-class Permission extends SpatiePermission
+class Permission extends Model
 {
     protected $connection = 'core';
+    protected $table = 'permissions';
+    protected $primaryKey = 'id_permision';
 
-    // Mantenemos los campos adicionales si son necesarios
-    protected $fillable = ['name', 'guard_name', 'application_id', 'description'];
+    protected $fillable = [
+        'nombres',
+        'sistema_id',
+    ];
+
+    // Compatibility accessors for code that uses 'name'
+    protected $appends = ['name'];
+
+    public function getNameAttribute()
+    {
+        return $this->nombres;
+    }
 
     /**
-     * Accessor: 'system' devuelve el nombre de la aplicación asociada.
-     * Esto permite que User->getSystemsAttribute() funcione correctamente.
+     * Get permission system name
      */
     public function getSystemAttribute()
     {
-        if ($this->application_id) {
-            // Buscar en la tabla applications de core
-            $app = \Illuminate\Support\Facades\DB::connection('core')
-                ->table('applications')
-                ->where('id', $this->application_id)
-                ->first();
-            return $app ? $app->nombre : null;
-        }
-        return null;
+        return $this->sistema?->sistema;
     }
 
-    // Relación con la aplicación/sistema
-    public function application()
+    public function roles()
     {
-        return $this->belongsTo(\Illuminate\Database\Eloquent\Model::class, 'application_id');
+        return $this->belongsToMany(Rol::class, 'role_has_permissions', 'permission_id', 'role_id');
     }
 
-    // Spatie ya maneja la relación roles, pero si usas el modelo Rol personalizado:
-    public function roles(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function sistema()
     {
-        return $this->belongsToMany(
-            Rol::class,
-            config('permission.table_names.role_has_permissions'),
-            config('permission.column_names.permission_pivot_key') ?: 'permission_id',
-            config('permission.column_names.role_pivot_key') ?: 'role_id'
-        );
+        return $this->belongsTo(System::class, 'sistema_id', 'id_sistema');
     }
 }

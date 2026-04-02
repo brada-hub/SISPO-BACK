@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Laravel\Socialite\Facades\Socialite;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
@@ -51,7 +52,7 @@ class AuthController extends Controller
              return response()->json(['error' => 'No se pudo crear el token'], 500);
         }
 
-        $user->load(['userSystems', 'rol.permissions', 'individualPermissions', 'sede']);
+        $user->load(['userSystems', 'roles.permissions', 'sede']);
 
         return response()->json([
             'success' => true,
@@ -78,7 +79,7 @@ class AuthController extends Controller
     /**
      * Callback de Google
      */
-    public function handleGoogleCallback(): JsonResponse
+    public function handleGoogleCallback(): JsonResponse|RedirectResponse
     {
         try {
             $googleUser = Socialite::driver('google')->stateless()->user();
@@ -143,7 +144,7 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
-        $user->load(['userSystems', 'rol.permissions', 'individualPermissions', 'sede']);
+        $user->load(['userSystems', 'roles.permissions', 'sede']);
         return response()->json(['user' => $user]);
     }
 }

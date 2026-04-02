@@ -157,7 +157,7 @@ class PortalController extends Controller
                     throw new \Exception("La(s) convocatoria(s) para: [{$nombres}] ya no se encuentran vigentes o han cerrado.");
                 }
 
-                // 2. Create or update Postulante
+                // 2. Create or update Postulante local
                 $postulante = Postulante::updateOrCreate(
                     ['ci' => $validated['ci']],
                     [
@@ -176,6 +176,7 @@ class PortalController extends Controller
                         'porque_cargo' => $validated['porque_cargo'] ?? null,
                     ]
                 );
+
 
                 // 3. Handle file uploads
                 if ($request->hasFile('foto_perfil')) {
@@ -200,6 +201,7 @@ class PortalController extends Controller
 
                 $postulante->save();
 
+
                 // 4. Create ONE Postulacion per each oferta
                 $postulacionIds = [];
                 $ofertasData = $request->input('ofertas_detalle', []);
@@ -216,7 +218,8 @@ class PortalController extends Controller
                         throw new \Exception("Usted ya tiene una postulación registrada y vigente para el cargo de: {$cargo}.");
                     }
 
-                    $detalle = collect($ofertasData)->firstWhere('oferta_id', $ofertaId);
+                    $detalleRaw = collect($ofertasData)->firstWhere('oferta_id', $ofertaId);
+                    $detalle = is_array($detalleRaw) ? $detalleRaw : [];
 
                     $postulacion = Postulacion::create([
                         'postulante_id' => $postulante->id,
@@ -411,7 +414,7 @@ class PortalController extends Controller
             ]);
 
             return DB::transaction(function () use ($validated, $request) {
-                // 1. Update or Create Postulante
+                // 1. Update or Create Postulante local
                 $postulante = Postulante::updateOrCreate(
                     ['ci' => $validated['ci']],
                     [
@@ -430,6 +433,7 @@ class PortalController extends Controller
                     ]
                 );
 
+
                 // 2. Handle Files
                 if ($request->hasFile('foto_perfil')) {
                     $postulante->foto_perfil_path = $request->file('foto_perfil')->store('postulantes/fotos', 'public');
@@ -442,6 +446,25 @@ class PortalController extends Controller
                 }
                 $postulante->save();
 
+                // ========================================================
+                // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
+                // ========================================================
+                $apellidos_parts = explode(' ', $validated['apellidos'], 2);
+                \App\Models\Persona::updateOrCreate(
+                    ['ci' => $validated['ci']],
+                    [
+                        'nombres'          => $validated['nombres'],
+                        'apellido_paterno' => $apellidos_parts[0] ?? '',
+                        'apellido_materno' => $apellidos_parts[1] ?? '',
+                        'ci_expedicion'    => $validated['ci_expedido'] ?? null,
+                        'correo_personal'  => $validated['email'],
+                        'celular'          => $validated['celular'] ?? null,
+                        'direccion'        => $validated['direccion_domicilio'] ?? null,
+                        'foto'             => $postulante->foto_perfil_path,
+                        'cv_path'          => $postulante->cv_pdf_path,
+                    ]
+                );
+                // ========================================================
                 // 3. Process Meritos
                 $meritosData = $request->input('meritos', []);
                 foreach ($meritosData as $index => $mData) {

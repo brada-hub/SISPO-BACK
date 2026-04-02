@@ -98,6 +98,7 @@ class MiLegajoController extends Controller
                 'ref_laboral_detalle' => $request->input('ref_laboral_detalle', $postulante->ref_laboral_detalle),
             ]);
 
+
             // 2. Handle connection updates (CI, Name) if user wants to sync?
             // Usually we keep them sync, but let's assume user source is primary for login, postulante is for CV.
 
@@ -121,6 +122,25 @@ class MiLegajoController extends Controller
             }
             $postulante->save();
 
+            // ========================================================
+            // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
+            // Incluyendo las rutas recién creadas de Foto y CV
+            // ========================================================
+            $apellidos_parts = explode(' ', $postulante->apellidos, 2);
+            \App\Models\Persona::updateOrCreate(
+                ['ci' => $postulante->ci],
+                [
+                    'nombres'          => $postulante->nombres,
+                    'apellido_paterno' => $apellidos_parts[0] ?? '',
+                    'apellido_materno' => $apellidos_parts[1] ?? '',
+                    'correo_personal'  => $postulante->email,
+                    'celular'          => $postulante->celular,
+                    'direccion'        => $postulante->direccion_domicilio,
+                    'foto'             => $postulante->foto_perfil_path,
+                    'cv_path'          => $postulante->cv_pdf_path,
+                ]
+            );
+            // ========================================================
             // 4. Handle Meritos (This is complex because it's a list)
             // We can add new merits. Updating existing ones might require ID.
 
