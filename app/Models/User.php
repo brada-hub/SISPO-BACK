@@ -97,7 +97,7 @@ class User extends Authenticatable implements JWTSubject
      */
     protected $appends = ['nombre_completo', 'permisos'];
 
-    protected $with = ['roles'];
+    protected $with = [];
 
     public function getNombreCompletoAttribute(): string
     {
@@ -125,7 +125,11 @@ class User extends Authenticatable implements JWTSubject
      */
     public function getRolAttribute()
     {
-        return $this->roles->first();
+        try {
+            return $this->roles->first();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function sede()
