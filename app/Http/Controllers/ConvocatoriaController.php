@@ -13,17 +13,20 @@ class ConvocatoriaController extends Controller
     {
         $user = auth()->user();
         $query = Convocatoria::query();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
 
-        // Si el usuario no es admin y tiene sede asignada, filtrar convocatorias
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('ofertas', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereIn('id', $allowedConvocatorias);
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('ofertas', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
-        return $query->with(['ofertas' => function($q) use ($user) {
-            if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
-                $q->where('sede_id', $user->sede_id);
+        return $query->with(['ofertas' => function ($q) use ($user, $allowedSedes) {
+            if (!$this->shouldLimitByConvocatoria($user) && !empty($allowedSedes)) {
+                $q->whereIn('sede_id', $allowedSedes);
             }
             $q->with(['sede', 'cargo']);
         }])->get();
@@ -55,6 +58,7 @@ class ConvocatoriaController extends Controller
             'config_requisitos_ids' => 'nullable|array',
             'requisitos_opcionales' => 'nullable|array',
             'requisitos_afiche' => 'nullable|array',
+            'matriz_evaluacion' => 'nullable|array',
             'ofertas' => 'required|array|min:1',
             'ofertas.*.sede_id' => 'required|exists:sedes,id',
             'ofertas.*.cargo_id' => 'required|exists:cargos,id',
@@ -72,6 +76,7 @@ class ConvocatoriaController extends Controller
                 'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
                 'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
                 'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
+                'matriz_evaluacion' => $validated['matriz_evaluacion'] ?? null,
             ]);
 
             foreach ($validated['ofertas'] as $o) {
@@ -91,18 +96,22 @@ class ConvocatoriaController extends Controller
     {
         $user = auth()->user();
         $query = Convocatoria::query();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
 
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('ofertas', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereIn('id', $allowedConvocatorias);
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('ofertas', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
         $convocatoria = $query->findOrFail($id);
 
-        return $convocatoria->load(['ofertas' => function($q) use ($user) {
-            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-                $q->where('sede_id', $user->sede_id);
+        return $convocatoria->load(['ofertas' => function ($q) use ($user, $allowedSedes) {
+            if (!$this->shouldLimitByConvocatoria($user) && !empty($allowedSedes)) {
+                $q->whereIn('sede_id', $allowedSedes);
             }
             $q->with(['sede', 'cargo']);
         }]);
@@ -121,6 +130,7 @@ class ConvocatoriaController extends Controller
             'config_requisitos_ids' => 'nullable|array',
             'requisitos_opcionales' => 'nullable|array',
             'requisitos_afiche' => 'nullable|array',
+            'matriz_evaluacion' => 'nullable|array',
             'ofertas' => 'required|array|min:1',
             'ofertas.*.sede_id' => 'required|exists:sedes,id',
             'ofertas.*.cargo_id' => 'required|exists:cargos,id',
@@ -138,18 +148,37 @@ class ConvocatoriaController extends Controller
                 'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
                 'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
                 'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
+                'matriz_evaluacion' => $validated['matriz_evaluacion'] ?? null,
             ]);
 
-            // Sync Ofertas (delete all and recreating is simplest for this scope)
-            $convocatoria->ofertas()->delete();
+            // Sync Ofertas correctly to prevent CASCADE DELETE of postulaciones
+            $existingOfertas = $convocatoria->ofertas()->get();
+            $keptOfertaIds = [];
+
             foreach ($validated['ofertas'] as $o) {
-                Oferta::create([
-                    'convocatoria_id' => $convocatoria->id,
-                    'sede_id' => $o['sede_id'],
-                    'cargo_id' => $o['cargo_id'],
-                    'vacantes' => $o['vacantes'] ?? 1,
-                ]);
+                $oferta = $existingOfertas->firstWhere(function ($val) use ($o) {
+                    return $val->sede_id == $o['sede_id'] && $val->cargo_id == $o['cargo_id'];
+                });
+
+                if ($oferta) {
+                    // Update existing to avoid changing its ID
+                    $oferta->update(['vacantes' => $o['vacantes'] ?? 1]);
+                    $keptOfertaIds[] = $oferta->id;
+                } else {
+                    // Create new
+                    $newOferta = \App\Models\Oferta::create([
+                        'convocatoria_id' => $convocatoria->id,
+                        'sede_id' => $o['sede_id'],
+                        'cargo_id' => $o['cargo_id'],
+                        'vacantes' => $o['vacantes'] ?? 1,
+                    ]);
+                    $keptOfertaIds[] = $newOferta->id;
+                }
             }
+
+            // Delete only ofertas that were explicitly removed from the configuration
+            // Note: If an oferta had postulaciones and the admin removed it, it WILL cascade delete those. 
+            $convocatoria->ofertas()->whereNotIn('id', $keptOfertaIds)->delete();
 
             return $convocatoria->load(['ofertas.sede', 'ofertas.cargo']);
         });
@@ -175,26 +204,53 @@ class ConvocatoriaController extends Controller
     public function convocatoriasConPostulantes()
     {
         $user = auth()->user();
-        $query = Convocatoria::withCount(['postulaciones' => function($q) use ($user) {
-            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-                $q->whereHas('oferta', function($oq) use ($user) {
-                    $oq->where('sede_id', $user->sede_id);
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
+
+        $query = Convocatoria::withCount(['postulaciones' => function ($q) use ($user, $allowedConvocatorias, $allowedSedes) {
+            if ($this->shouldLimitByConvocatoria($user)) {
+                $q->whereHas('oferta', function ($oq) use ($allowedConvocatorias) {
+                    $oq->whereIn('convocatoria_id', $allowedConvocatorias);
+                });
+            } elseif (!empty($allowedSedes)) {
+                $q->whereHas('oferta', function ($oq) use ($allowedSedes) {
+                    $oq->whereIn('sede_id', $allowedSedes);
                 });
             }
         }]);
 
-        // Si el usuario es limitado, solo mostrar convocatorias que tienen ofertas en su sede
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('ofertas', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereIn('id', $allowedConvocatorias);
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('ofertas', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
-        return $query->with(['ofertas' => function($q) use ($user) {
-            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-                $q->where('sede_id', $user->sede_id);
+        return $query->with(['ofertas' => function ($q) use ($user, $allowedSedes) {
+            if (!$this->shouldLimitByConvocatoria($user) && !empty($allowedSedes)) {
+                $q->whereIn('sede_id', $allowedSedes);
             }
             $q->with('sede');
         }])->orderBy('fecha_inicio', 'desc')->get();
+    }
+
+    private function shouldLimitByConvocatoria($user): bool
+    {
+        return $user && !$user->isAdminUser() && $user->hasConvocatoriaScope();
+    }
+
+    private function allowedConvocatoriaIds($user): array
+    {
+        return $user ? $user->allowedConvocatoriaIds() : [];
+    }
+
+    private function allowedSedeIds($user): array
+    {
+        if (!$user || $user->isAdminUser() || $user->hasConvocatoriaScope()) {
+            return [];
+        }
+
+        return $user->allowedSedeIds();
     }
 }

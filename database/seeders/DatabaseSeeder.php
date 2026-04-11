@@ -15,29 +15,33 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. Roles
+        // 1. Roles (Gestionados en SIGETH SSO)
+        /*
         $adminRol = Rol::updateOrCreate(
-            ['nombre' => 'ADMINISTRADOR'],
+            ['nombres' => 'ADMINISTRADOR'],
             ['descripcion' => 'ACCESO TOTAL AL SISTEMA', 'activo' => true]
         );
 
         $userRol = Rol::updateOrCreate(
-            ['nombre' => 'USUARIO'],
+            ['nombres' => 'USUARIO'],
             ['descripcion' => 'ACCESO LIMITADO', 'activo' => true]
         );
+        */
 
-        // 2. Usuario Administrador
+        // 2. Usuario Administrador (Gestionado en SIGETH SSO)
+        /*
         User::updateOrCreate(
             ['ci' => '13260003'],
             [
                 'nombres' => 'BRAYAN DAVID',
                 'apellidos' => 'PADILLA SILES',
-                'rol_id' => $adminRol->id,
+                'rol_id' => $adminRol->id, // Esto requeriría que adminRol existiera aquí
                 'password' => Hash::make('admin123'),
                 'activo' => true,
                 'must_change_password' => false,
             ]
         );
+        */
 
         // 3. Sedes
         $sedes = [

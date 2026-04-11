@@ -18,12 +18,17 @@ class PostulacionController extends Controller
     public function index(Request $request)
     {
         $user = auth()->user();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'oferta.convocatoria', 'evaluacion']);
 
-        // Filter by Sede if the user is not an Admin
-        if ($user && $user->rol->nombre !== 'ADMINISTRADOR' && $user->sede_id) {
-            $query->whereHas('oferta', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
+                $q->whereIn('convocatoria_id', $allowedConvocatorias);
+            });
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('oferta', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
@@ -51,11 +56,17 @@ class PostulacionController extends Controller
     public function show($id)
     {
         $user = auth()->user();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'evaluacion']);
 
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('oferta', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
+                $q->whereIn('convocatoria_id', $allowedConvocatorias);
+            });
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('oferta', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
@@ -69,11 +80,17 @@ class PostulacionController extends Controller
         ]);
 
         $user = auth()->user();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::query();
 
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('oferta', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
+                $q->whereIn('convocatoria_id', $allowedConvocatorias);
+            });
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('oferta', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
@@ -91,6 +108,8 @@ class PostulacionController extends Controller
     public function expediente($id)
     {
         $user = auth()->user();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::with([
             'postulante.meritos.tipoDocumento',
             'postulante.meritos.archivos',
@@ -99,9 +118,13 @@ class PostulacionController extends Controller
             'oferta.convocatoria'
         ]);
 
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('oferta', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
+                $q->whereIn('convocatoria_id', $allowedConvocatorias);
+            });
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('oferta', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
@@ -118,11 +141,15 @@ class PostulacionController extends Controller
 
             $convocatoria = Convocatoria::findOrFail($convocatoriaId);
             $user = auth()->user();
+            $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+            $allowedSedes = $this->allowedSedeIds($user);
             $query = Postulacion::with(['postulante.meritos.tipoDocumento', 'oferta.cargo', 'oferta.sede', 'evaluacion'])
-                ->whereHas('oferta', function($q) use ($convocatoriaId, $user) {
+                ->whereHas('oferta', function($q) use ($convocatoriaId, $user, $allowedConvocatorias, $allowedSedes) {
                     $q->where('convocatoria_id', $convocatoriaId);
-                    if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-                        $q->where('sede_id', $user->sede_id);
+                    if ($this->shouldLimitByConvocatoria($user)) {
+                        $q->whereIn('convocatoria_id', $allowedConvocatorias);
+                    } elseif (!empty($allowedSedes)) {
+                        $q->whereIn('sede_id', $allowedSedes);
                     }
                 });
 
@@ -293,11 +320,17 @@ class PostulacionController extends Controller
     {
         try {
             $user = auth()->user();
+            $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+            $allowedSedes = $this->allowedSedeIds($user);
             $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede']);
 
-            if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-                $query->whereHas('oferta', function($q) use ($user) {
-                    $q->where('sede_id', $user->sede_id);
+            if ($this->shouldLimitByConvocatoria($user)) {
+                $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
+                    $q->whereIn('convocatoria_id', $allowedConvocatorias);
+                });
+            } elseif (!empty($allowedSedes)) {
+                $query->whereHas('oferta', function ($q) use ($allowedSedes) {
+                    $q->whereIn('sede_id', $allowedSedes);
                 });
             }
 
@@ -353,5 +386,24 @@ class PostulacionController extends Controller
         $postulacion->delete();
 
         return response()->json(['success' => true, 'message' => 'Postulación eliminada correctamente']);
+    }
+
+    private function shouldLimitByConvocatoria($user): bool
+    {
+        return $user && !$user->isAdminUser() && $user->hasConvocatoriaScope();
+    }
+
+    private function allowedConvocatoriaIds($user): array
+    {
+        return $user ? $user->allowedConvocatoriaIds() : [];
+    }
+
+    private function allowedSedeIds($user): array
+    {
+        if (!$user || $user->isAdminUser() || $user->hasConvocatoriaScope()) {
+            return [];
+        }
+
+        return $user->allowedSedeIds();
     }
 }

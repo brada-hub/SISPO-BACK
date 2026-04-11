@@ -10,118 +10,77 @@ class UserController extends Controller
 {
     public function index()
     {
-        $currentUser = auth()->user();
-        $query = User::with(['rol', 'sede']);
+        $users = User::with(['roles', 'sede', 'persona'])
+            ->whereHas('roles.permissions', function ($permissionQuery) {
+                $permissionQuery->where('sistema_id', 2);
+            })
+            ->get()
+            ->map(function (User $user) {
+                $role = $user->roles->first();
 
-        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
-        $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN']);
-        $jurisdiccion = $currentUser->jurisdiccion ?? [];
+                return [
+                    'id' => $user->id_user,
+                    'id_user' => $user->id_user,
+                    'username' => $user->username,
+                    'activo' => (bool) $user->activo,
+                    'convocatoria_scope' => $user->convocatoria_scope ?? [],
+                    'password_segura' => !(bool) $user->must_change_password,
+                    'password_actual' => $user->must_change_password
+                        ? ($user->persona?->ci ?: $user->username)
+                        : '🔒 Personalizada',
+                    'nombres' => $user->persona?->nombres,
+                    'apellido_paterno' => $user->persona?->apellido_paterno,
+                    'apellido_materno' => $user->persona?->apellido_materno,
+                    'ci' => $user->persona?->ci ?: $user->username,
+                    'rol' => $role ? [
+                        'id' => $role->id ?? $role->id_rol ?? null,
+                        'name' => $role->name ?? $role->nombre ?? null,
+                        'nombre' => $role->nombre ?? $role->name ?? null,
+                    ] : null,
+                    'sede' => $user->sede ? [
+                        'id' => $user->sede->id ?? $user->sede->id_sede ?? null,
+                        'nombre' => $user->sede->nombre ?? $user->sede->sede ?? null,
+                    ] : null,
+                    'persona' => $user->persona ? [
+                        'id' => $user->persona->id,
+                        'nombres' => $user->persona->nombres,
+                        'apellido_paterno' => $user->persona->apellido_paterno,
+                        'apellido_materno' => $user->persona->apellido_materno,
+                        'ci' => $user->persona->ci,
+                        'foto' => $user->persona->foto,
+                        'foto_url' => $user->persona->foto_url,
+                    ] : null,
+                ];
+            })
+            ->values();
 
-        if (!$isAdmin) {
-            $allowedSedes = !empty($jurisdiccion) ? $jurisdiccion : ($currentUser->sede_id ? [$currentUser->sede_id] : []);
-            if (!empty($allowedSedes)) {
-                $query->whereIn('sede_id', $allowedSedes);
-            }
-        }
-
-        $users = $query->get();
-
-        // Usar must_change_password como indicador (SIN Hash::check que era muy lento)
-        $users->transform(function ($u) {
-            if ($u->must_change_password) {
-                $u->password_actual = $u->ci;
-                $u->password_segura = false;
-            } else {
-                $u->password_actual = '🔒 Personalizada';
-                $u->password_segura = true;
-            }
-            return $u;
-        });
-
-        return $users;
+        return response()->json($users);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'rol_id' => 'required|exists:core.roles,id',
-            'sede_id' => 'nullable|exists:core.sedes,id',
-            'nombres' => 'required|string|max:255',
-            'apellido_paterno' => 'required|string|max:255',
-            'apellido_materno' => 'nullable|string|max:255',
-            'ci' => 'required|string|unique:core.users,ci',
-            'activo' => 'boolean',
-            'jurisdiccion' => 'nullable|array',
-        ]);
-
-        // Calcular apellidos combinado para compatibilidad
-        $validated['apellidos'] = trim($validated['apellido_paterno'] . ' ' . ($validated['apellido_materno'] ?? ''));
-
-        $validated['password'] = Hash::make($validated['ci']);
-        $validated['must_change_password'] = true;
-
-        $user = User::create($validated);
-
-        // ========================================================
-        // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
-        // ========================================================
-        \App\Models\Persona::updateOrCreate(
-            ['ci' => $validated['ci']],
-            [
-                'nombres'          => $validated['nombres'],
-                'apellido_paterno' => $validated['apellido_paterno'],
-                'apellido_materno' => $validated['apellido_materno'] ?? '',
-            ]
-        );
-        // ========================================================
-
-        return $user;
+        return response()->json([
+            'message' => 'Los usuarios de SISPO se gestionan desde el SSO/SIGETH. Aqu� solo se administra el alcance por convocatoria.'
+        ], 422);
     }
 
     public function update(Request $request, User $usuario)
     {
         $validated = $request->validate([
-            'rol_id' => 'required|exists:core.roles,id',
-            'sede_id' => 'nullable|exists:core.sedes,id',
-            'nombres' => 'required|string|max:255',
-            'apellido_paterno' => 'required|string|max:255',
-            'apellido_materno' => 'nullable|string|max:255',
-            'ci' => 'required|string|unique:core.users,ci,' . $usuario->id,
-            'activo' => 'boolean',
-            'jurisdiccion' => 'nullable|array',
+            'activo' => 'sometimes|boolean',
+            'convocatoria_scope' => 'nullable|array',
+            'convocatoria_scope.*' => 'integer|exists:mysql.convocatorias,id',
         ]);
 
-        // Calcular apellidos combinado para compatibilidad
-        $validated['apellidos'] = trim($validated['apellido_paterno'] . ' ' . ($validated['apellido_materno'] ?? ''));
+        $usuario->update([
+            'activo' => $validated['activo'] ?? $usuario->activo,
+            'convocatoria_scope' => $validated['convocatoria_scope'] ?? [],
+        ]);
 
-        $currentUser = auth()->user();
-        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
-        $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN']);
-        $jurisdiccion = $currentUser->jurisdiccion ?? [];
-
-        if (!$isAdmin) {
-            $allowedSedes = !empty($jurisdiccion) ? $jurisdiccion : ($currentUser->sede_id ? [$currentUser->sede_id] : []);
-            if (!empty($allowedSedes) && !in_array($usuario->sede_id, $allowedSedes)) {
-                return response()->json(['message' => 'No tiene permisos para editar usuarios de esta sede'], 403);
-            }
-        }
-
-        $usuario->update($validated);
-
-        // ========================================================
-        // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
-        // ========================================================
-        \App\Models\Persona::updateOrCreate(
-            ['ci' => $validated['ci']],
-            [
-                'nombres'          => $validated['nombres'],
-                'apellido_paterno' => $validated['apellido_paterno'],
-                'apellido_materno' => $validated['apellido_materno'] ?? '',
-            ]
-        );
-        // ========================================================
-
-        return $usuario->load(['rol', 'sede']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Alcance por convocatoria actualizado correctamente.',
+        ]);
     }
 
     public function changePassword(Request $request)
@@ -133,14 +92,12 @@ class UserController extends Controller
             'password' => 'required|string|min:6|confirmed',
         ];
 
-        // Solo validamos password_current si el usuario NO tiene pendiente el cambio obligatorio
         if (!$user->must_change_password) {
             $rules['password_current'] = 'required';
         }
 
         $request->validate($rules);
 
-        // Si no es un cambio obligatorio, verificar que la contraseña actual sea correcta
         if (!$user->must_change_password) {
             if (!Hash::check($request->password_current, $user->password)) {
                 return response()->json([
@@ -162,60 +119,50 @@ class UserController extends Controller
 
     public function destroy(User $usuario)
     {
-        $currentUser = auth()->user();
-        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
-        $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN']);
-        $jurisdiccion = $currentUser->jurisdiccion ?? [];
-
-        if (!$isAdmin) {
-            $allowedSedes = !empty($jurisdiccion) ? $jurisdiccion : ($currentUser->sede_id ? [$currentUser->sede_id] : []);
-            if (!empty($allowedSedes) && !in_array($usuario->sede_id, $allowedSedes)) {
-                return response()->json(['message' => 'No tiene permisos para eliminar usuarios de esta sede'], 403);
-            }
-        }
-
-        $usuario->delete();
-        return response()->noContent();
+        return response()->json([
+            'message' => 'La baja de usuarios se gestiona desde el SSO/SIGETH.'
+        ], 403);
     }
 
-    /**
-     * 🔓 CRACK PASSWORDS - Solo para demo/reto educativo
-     * Intenta "adivinar" contraseñas verificando si coinciden con el CI del usuario
-     * ⚠️ NUNCA usar en producción real
-     */
     public function crackPasswords()
     {
         $currentUser = auth()->user();
-        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
+        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name ?? $currentUser->rol->nombre ?? '') : '';
         $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'ADMIN', 'SUPERADMIN']);
 
-        // Solo admins pueden usar esta función
         if (!$isAdmin) {
             return response()->json(['message' => 'Acceso denegado'], 403);
         }
 
-        $users = User::with(['rol', 'sede'])->get();
+        $users = User::with(['roles', 'sede', 'persona'])->get();
         $crackedPasswords = [];
         $safes = [];
 
         foreach ($users as $user) {
-            // Intentamos verificar si la contraseña es igual al CI
-            if (Hash::check($user->ci, $user->password)) {
+            $displayName = trim(implode(' ', array_filter([
+                $user->persona?->nombres,
+                $user->persona?->apellido_paterno,
+                $user->persona?->apellido_materno,
+            ]))) ?: $user->username;
+            $displayCi = $user->persona?->ci ?: $user->username;
+            $role = $user->roles->first();
+
+            if (Hash::check($displayCi, $user->password)) {
                 $crackedPasswords[] = [
-                    'id' => $user->id,
-                    'nombre_completo' => $user->nombres . ' ' . $user->apellidos,
-                    'ci' => $user->ci,
-                    'rol' => $user->rol->nombre ?? 'N/A',
+                    'id' => $user->id_user,
+                    'nombre_completo' => $displayName,
+                    'ci' => $displayCi,
+                    'rol' => $role->nombre ?? $role->name ?? 'N/A',
                     'sede' => $user->sede->nombre ?? 'NACIONAL',
-                    'password_descubierta' => $user->ci,
+                    'password_descubierta' => $displayCi,
                     'metodo' => 'Hash::check() vs CI',
                     'vulnerabilidad' => 'Contraseña predecible (igual al CI)'
                 ];
             } else {
                 $safes[] = [
-                    'id' => $user->id,
-                    'nombre_completo' => $user->nombres . ' ' . $user->apellidos,
-                    'ci' => $user->ci,
+                    'id' => $user->id_user,
+                    'nombre_completo' => $displayName,
+                    'ci' => $displayCi,
                     'estado' => '🔒 SEGURO - Contraseña personalizada'
                 ];
             }
@@ -238,38 +185,34 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * 🔄 RESET PASSWORD - Resetea la contraseña de un usuario a su CI
-     */
     public function resetPassword(User $usuario)
     {
         $currentUser = auth()->user();
-        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name) : '';
+        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name ?? $currentUser->rol->nombre ?? '') : '';
         $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'ADMIN', 'SUPERADMIN']);
 
         if (!$isAdmin) {
             return response()->json(['message' => 'Acceso denegado'], 403);
         }
 
-        $usuario->password = Hash::make($usuario->ci);
+        $displayCi = $usuario->persona?->ci ?: $usuario->username;
+        $usuario->password = Hash::make($displayCi);
         $usuario->must_change_password = true;
         $usuario->save();
 
         return response()->json([
             'success' => true,
             'message' => 'Contraseña reseteada correctamente. La nueva contraseña es el CI del usuario.',
-            'nueva_password' => $usuario->ci
+            'nueva_password' => $displayCi
         ]);
     }
 
-    /**
-     * 🆔 GET ALL PERMISSIONS AND USER INDIVIDUAL ONES
-     */
     public function getPermissions(User $usuario)
     {
-        $allPermissions = \App\Models\Permission::all();
+        $allPermissions = \App\Models\Permission::where('sistema_id', 2)->get();
         $userIndividualPermissionsIds = $usuario->individualPermissions()->pluck('permission_id')->toArray();
-        $rolePermissionsIds = $usuario->rol ? $usuario->rol->permissions()->pluck('permission_id')->toArray() : [];
+        $role = $usuario->roles->first();
+        $rolePermissionsIds = $role ? $role->permissions()->pluck('permission_id')->toArray() : [];
 
         return response()->json([
             'all_permissions' => $allPermissions,
@@ -278,14 +221,11 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * 🆔 SYNC INDIVIDUAL PERMISSIONS
-     */
     public function syncPermissions(Request $request, User $usuario)
     {
         $request->validate([
             'permissions' => 'array',
-            'permissions.*' => 'exists:core.permissions,id',
+            'permissions.*' => 'exists:core.permissions,id_permision',
         ]);
 
         $usuario->individualPermissions()->syncWithPivotValues($request->permissions, ['model_type' => User::class]);
@@ -296,46 +236,12 @@ class UserController extends Controller
         ]);
     }
 
-    /**
-     * 🆔 IMPORT LEGACY USERS (SISPO & SIGVA)
-     */
     public function importLegacyUsers()
     {
-        $importedCount = 0;
-        $databases = ['sispo_db', 'sigva_db'];
-
-        foreach ($databases as $db) {
-            try {
-                $legacyUsers = \DB::connection('mysql')->table("$db.users")->get();
-
-                foreach ($legacyUsers as $lUser) {
-                    // Check if exists by CI
-                    if (!$lUser->ci) continue;
-
-                    $exists = User::where('ci', $lUser->ci)->exists();
-                    if (!$exists) {
-                        User::create([
-                            'nombres' => $lUser->nombres ?? $lUser->name ?? 'Importado',
-                            'apellidos' => $lUser->apellidos ?? ($lUser->apellido_paterno . ' ' . $lUser->apellido_materno) ?? '',
-                            'ci' => $lUser->ci,
-                            'email' => $lUser->email ?? ($lUser->ci . '@temp.com'),
-                            'password' => $lUser->password, // Carry over hashed password
-                            'activo' => true,
-                            'rol_id' => 2, // Default to 'Usuario'
-                            'must_change_password' => false,
-                        ]);
-                        $importedCount++;
-                    }
-                }
-            } catch (\Exception $e) {
-                // Skip if DB doesn't exist or table missing
-                continue;
-            }
-        }
-
         return response()->json([
-            'success' => true,
-            'message' => "Se han importado $importedCount usuarios nuevos desdes sistemas antiguos.",
-        ]);
+            'success' => false,
+            'message' => 'La importación local ya no aplica. Los usuarios se centralizan en el SSO/SIGETH.'
+        ], 422);
     }
 }
+

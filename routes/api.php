@@ -52,6 +52,7 @@ Route::get('/auth/google/callback', [App\Http\Controllers\Api\AuthController::cl
 
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [App\Http\Controllers\AuthController::class, 'logout']);
+    Route::get('/me', [App\Http\Controllers\Api\AuthController::class, 'me']);
     Route::get('/user', function (Request $request) {
         return $request->user()->load('roles'); // Fixed: relation is 'roles', not 'rol'
     });
@@ -61,6 +62,7 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('cargos', \App\Http\Controllers\CargoController::class);
     Route::apiResource('tipos-documento', \App\Http\Controllers\TipoDocumentoController::class);
     Route::apiResource('convocatorias', \App\Http\Controllers\ConvocatoriaController::class);
+    Route::apiResource('plantillas-matrices', \App\Http\Controllers\PlantillaMatrizController::class);
 
     // Convocatorias with postulations count
     Route::get('admin/convocatorias-con-postulantes', [App\Http\Controllers\ConvocatoriaController::class, 'convocatoriasConPostulantes']);

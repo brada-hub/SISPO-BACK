@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\EvaluacionPostulacion;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class EvaluacionMeritoController extends Controller
@@ -11,15 +11,20 @@ class EvaluacionMeritoController extends Controller
     public function showByPostulacion($postulacionId)
     {
         $user = auth()->user();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
         $query = \App\Models\Postulacion::query();
 
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('oferta', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
+                $q->whereIn('convocatoria_id', $allowedConvocatorias);
+            });
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('oferta', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
-        // Check if user has access to this postulation
         if (!$query->where('id', $postulacionId)->exists()) {
             return response()->json(['message' => 'No tiene acceso a este expediente'], 403);
         }
@@ -48,11 +53,17 @@ class EvaluacionMeritoController extends Controller
         ]);
 
         $user = auth()->user();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
         $query = \App\Models\Postulacion::query();
 
-        if ($user && !in_array($user->rol->nombre, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $query->whereHas('oferta', function($q) use ($user) {
-                $q->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
+                $q->whereIn('convocatoria_id', $allowedConvocatorias);
+            });
+        } elseif (!empty($allowedSedes)) {
+            $query->whereHas('oferta', function ($q) use ($allowedSedes) {
+                $q->whereIn('sede_id', $allowedSedes);
             });
         }
 
@@ -72,12 +83,10 @@ class EvaluacionMeritoController extends Controller
             ]
         );
 
-        // Update postulation status to en_revision if it was 'enviada'
         if ($postulacion->estado === 'enviada') {
             $postulacion->estado = 'en_revision';
         }
 
-        // Update pretension salarial if provided
         if ($request->has('pretension_salarial')) {
             $postulacion->pretension_salarial = $validated['pretension_salarial'];
         }
@@ -86,8 +95,27 @@ class EvaluacionMeritoController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Evaluación y pretensión guardadas correctamente',
-            'data' => $evaluacion
+            'message' => 'Evaluacion y pretension guardadas correctamente',
+            'data' => $evaluacion,
         ]);
+    }
+
+    private function shouldLimitByConvocatoria($user): bool
+    {
+        return $user && !$user->isAdminUser() && $user->hasConvocatoriaScope();
+    }
+
+    private function allowedConvocatoriaIds($user): array
+    {
+        return $user ? $user->allowedConvocatoriaIds() : [];
+    }
+
+    private function allowedSedeIds($user): array
+    {
+        if (!$user || $user->isAdminUser() || $user->hasConvocatoriaScope()) {
+            return [];
+        }
+
+        return $user->allowedSedeIds();
     }
 }

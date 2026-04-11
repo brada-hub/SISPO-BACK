@@ -17,17 +17,24 @@ class DashboardController extends Controller
     {
         $hoy = Carbon::today();
         $user = auth()->user();
+        $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
+        $allowedSedes = $this->allowedSedeIds($user);
 
         $qTotal = Postulacion::query();
         $qActivas = Convocatoria::whereDate('fecha_inicio', '<=', $hoy)->whereDate('fecha_cierre', '>=', $hoy);
         $qHoy = Postulacion::whereDate('created_at', $hoy);
         $qPendientes = Postulacion::where('estado', 'enviada');
 
-        if ($user && !in_array($user->rol?->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $qTotal->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
-            $qActivas->whereHas('ofertas', fn($q) => $q->where('sede_id', $user->sede_id));
-            $qHoy->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
-            $qPendientes->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $qTotal->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
+            $qActivas->whereIn('id', $allowedConvocatorias);
+            $qHoy->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
+            $qPendientes->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
+        } elseif (!empty($allowedSedes)) {
+            $qTotal->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
+            $qActivas->whereHas('ofertas', fn($q) => $q->whereIn('sede_id', $allowedSedes));
+            $qHoy->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
+            $qPendientes->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
         }
 
         $totalPostulaciones = $qTotal->count();
@@ -46,8 +53,10 @@ class DashboardController extends Controller
             ->select('ofertas.sede_id', DB::raw('count(*) as postulaciones_count'))
             ->groupBy('ofertas.sede_id');
 
-        if ($user && !in_array($user->rol?->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $sedeQuery->where('ofertas.sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $sedeQuery->whereIn('ofertas.convocatoria_id', $allowedConvocatorias);
+        } elseif (!empty($allowedSedes)) {
+            $sedeQuery->whereIn('ofertas.sede_id', $allowedSedes);
         }
 
         $conteosRaw = $sedeQuery->get();
@@ -65,8 +74,10 @@ class DashboardController extends Controller
 
         // 3. Cargos Postulados (Combinación Cargo - Sede) - Solo de convocatorias activas
         $qOfertaStats = Oferta::query();
-        if ($user && !in_array($user->rol?->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $qOfertaStats->where('sede_id', $user->sede_id);
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $qOfertaStats->whereIn('convocatoria_id', $allowedConvocatorias);
+        } elseif (!empty($allowedSedes)) {
+            $qOfertaStats->whereIn('sede_id', $allowedSedes);
         }
 
         $topOfertas = $qOfertaStats->whereHas('convocatoria', function($q) use ($hoy) {
@@ -93,8 +104,10 @@ class DashboardController extends Controller
 
         // 4. Próximos Cierres (Próximos 7 días)
         $qCierres = Convocatoria::query();
-        if ($user && !in_array($user->rol?->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $qCierres->whereHas('ofertas', fn($q) => $q->where('sede_id', $user->sede_id));
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $qCierres->whereIn('id', $allowedConvocatorias);
+        } elseif (!empty($allowedSedes)) {
+            $qCierres->whereHas('ofertas', fn($q) => $q->whereIn('sede_id', $allowedSedes));
         }
 
         $proximosCierres = $qCierres->whereDate('fecha_cierre', '>=', $hoy)
@@ -105,8 +118,10 @@ class DashboardController extends Controller
 
         // 5. Actividad Reciente
         $qReciente = Postulacion::query();
-        if ($user && !in_array($user->rol?->name, ['ADMINISTRADOR', 'SUPER ADMIN']) && $user->sede_id) {
-            $qReciente->whereHas('oferta', fn($q) => $q->where('sede_id', $user->sede_id));
+        if ($this->shouldLimitByConvocatoria($user)) {
+            $qReciente->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
+        } elseif (!empty($allowedSedes)) {
+            $qReciente->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
         }
 
         $actividadReciente = $qReciente->with(['postulante:id,nombres,apellidos', 'oferta.cargo:id,nombre', 'oferta.sede:id,nombre'])
@@ -127,5 +142,24 @@ class DashboardController extends Controller
             'cierres_criticos' => $proximosCierres,
             'recientes' => $actividadReciente
         ]);
+    }
+
+    private function shouldLimitByConvocatoria($user): bool
+    {
+        return $user && !$user->isAdminUser() && $user->hasConvocatoriaScope();
+    }
+
+    private function allowedConvocatoriaIds($user): array
+    {
+        return $user ? $user->allowedConvocatoriaIds() : [];
+    }
+
+    private function allowedSedeIds($user): array
+    {
+        if (!$user || $user->isAdminUser() || $user->hasConvocatoriaScope()) {
+            return [];
+        }
+
+        return $user->allowedSedeIds();
     }
 }

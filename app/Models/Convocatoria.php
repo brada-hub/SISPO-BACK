@@ -19,12 +19,14 @@ class Convocatoria extends Model
         'config_requisitos_ids',
         'requisitos_opcionales',
         'requisitos_afiche',
+        'matriz_evaluacion',
     ];
 
     protected $casts = [
         'config_requisitos_ids' => 'array',
         'requisitos_opcionales' => 'array',
         'requisitos_afiche' => 'array',
+        'matriz_evaluacion' => 'array',
         'fecha_inicio' => 'date',
         'fecha_cierre' => 'date',
     ];

@@ -44,6 +44,7 @@ class User extends Authenticatable implements JWTSubject
         'activo',
         'must_change_password',
         'jurisdiccion',
+        'convocatoria_scope',
     ];
 
     /**
@@ -67,13 +68,14 @@ class User extends Authenticatable implements JWTSubject
             'password' => 'hashed',
             'must_change_password' => 'boolean',
             'jurisdiccion' => 'array',
+            'convocatoria_scope' => 'array',
         ];
     }
 
     /**
      * The attributes that should be appended to arrays.
      */
-    protected $appends = ['nombre_completo', 'permisos', 'systems'];
+    protected $appends = ['nombre_completo', 'permisos'];
 
     protected $with = ['roles'];
 
@@ -116,30 +118,42 @@ class User extends Authenticatable implements JWTSubject
      */
     public function persona()
     {
-        return $this->belongsTo(Persona::class, 'id_persona', 'id_persona');
-    }
-
-    /**
-     * Systems link (pivot)
-     */
-    public function userSystems()
-    {
-        return $this->belongsToMany(System::class, 'application_user', 'user_id', 'application_id')
-                    ->withPivot('role', 'permissions')
-                    ->withTimestamps();
-    }
-
-    /**
-     * Dynamic systems attribute (filtered by permissions)
-     */
-    public function getSystemsAttribute()
-    {
-        return $this->getAllPermissions()->pluck('system')->unique()->filter()->values()->toArray();
+        return $this->belongsTo(Persona::class, 'id_persona', 'id');
     }
 
     public function postulante()
     {
         return $this->hasOne(Postulante::class);
+    }
+
+    public function isAdminUser(): bool
+    {
+        $roleName = strtoupper($this->rol?->name ?? $this->rol?->nombre ?? '');
+
+        return in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN', 'ADMIN'], true);
+    }
+
+    public function allowedSedeIds(): array
+    {
+        $jurisdiccion = $this->jurisdiccion ?? [];
+
+        if (!empty($jurisdiccion)) {
+            return array_values(array_unique(array_map('intval', $jurisdiccion)));
+        }
+
+        return $this->sede_id ? [(int) $this->sede_id] : [];
+    }
+
+    public function allowedConvocatoriaIds(): array
+    {
+        $convocatorias = $this->convocatoria_scope ?? [];
+
+        return array_values(array_unique(array_map('intval', $convocatorias)));
+    }
+
+    public function hasConvocatoriaScope(): bool
+    {
+        return count($this->allowedConvocatoriaIds()) > 0;
     }
 
     /**
@@ -166,3 +180,5 @@ class User extends Authenticatable implements JWTSubject
         ];
     }
 }
+
+

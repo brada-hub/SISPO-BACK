@@ -52,7 +52,7 @@ class AuthController extends Controller
              return response()->json(['error' => 'No se pudo crear el token'], 500);
         }
 
-        $user->load(['userSystems', 'roles.permissions', 'sede']);
+        $user->load(['roles', 'sede', 'persona']);
 
         return response()->json([
             'success' => true,
@@ -143,8 +143,15 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user();
-        $user->load(['userSystems', 'roles.permissions', 'sede']);
+        $user = auth('api')->user() ?? $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Sesion no valida o expirada.',
+            ], 401);
+        }
+
+        $user->load(['roles', 'sede', 'persona']);
         return response()->json(['user' => $user]);
     }
 }

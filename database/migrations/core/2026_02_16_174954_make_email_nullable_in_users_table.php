@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        /* Comentado para evitar errores de conexión al central de SIGETH
         Schema::connection('core')->table('users', function (Blueprint $table) {
             $table->string('email')->nullable()->change();
         });
+        */
     }
 
     /**
@@ -21,8 +23,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        /*
         Schema::connection('core')->table('users', function (Blueprint $table) {
             $table->string('email')->nullable(false)->change();
         });
+        */
     }
 };
