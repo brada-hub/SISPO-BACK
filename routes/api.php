@@ -51,7 +51,7 @@ Route::get('/auth/google/redirect', [App\Http\Controllers\Api\AuthController::cl
 Route::get('/auth/google/callback', [App\Http\Controllers\Api\AuthController::class, 'handleGoogleCallback']);
 
 Route::middleware('auth:api')->group(function () {
-    Route::post('/logout', [App\Http\Controllers\AuthController::class, 'logout']);
+    Route::post('/logout', [App\Http\Controllers\Api\AuthController::class, 'logout']);
     Route::get('/me', [App\Http\Controllers\Api\AuthController::class, 'me']);
     Route::get('/user', function (Request $request) {
         return $request->user()->load('roles'); // Fixed: relation is 'roles', not 'rol'
