@@ -48,9 +48,8 @@ class AuthController extends Controller
             ]);
         }
 
-        if (!$token = auth('api')->login($user)) {
-             return response()->json(['error' => 'No se pudo crear el token'], 500);
-        }
+        // Generar Token de Sanctum
+        $token = $user->createToken('sispo-token')->plainTextToken;
 
         $user->load(['roles', 'sede', 'persona']);
 
@@ -60,8 +59,7 @@ class AuthController extends Controller
             'data' => [
                 'user' => $user,
                 'token' => $token,
-                'token_type' => 'bearer',
-                'expires_in' => auth('api')->factory()->getTTL() * 60
+                'token_type' => 'bearer'
             ]
         ]);
     }
@@ -137,7 +135,7 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        auth('api')->logout();
+        $request->user()->currentAccessToken()->delete();
         return response()->json(['success' => true, 'message' => 'Logout exitoso']);
     }
 
