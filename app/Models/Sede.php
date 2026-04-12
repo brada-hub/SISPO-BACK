@@ -8,6 +8,7 @@ class Sede extends Model
 {
     protected $connection = 'core';
     protected $table = 'sedes';
+    protected $primaryKey = 'id_sede';
 
     protected $fillable = ['nombre', 'departamento', 'sigla', 'activo'];
 
