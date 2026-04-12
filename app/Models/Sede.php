@@ -7,8 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 class Sede extends Model
 {
     protected $connection = 'core';
-    protected $table = 'sedes';
-    protected $fillable = ['nombre', 'departamento', 'sigla', 'activo']; // Adjusted core fields
+    
+    public function getTable()
+    {
+        return config('database.connections.core.database') . '.sedes';
+    }
+
+    protected $fillable = ['nombre', 'departamento', 'sigla', 'activo'];
 
     public function ofertas()
     {
