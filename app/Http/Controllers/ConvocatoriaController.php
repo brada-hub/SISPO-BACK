@@ -166,7 +166,7 @@ class ConvocatoriaController extends Controller
                     $keptOfertaIds[] = $oferta->id;
                 } else {
                     // Create new
-                    $newOferta = \App\Models\Oferta::create([
+                    $newOferta = Oferta::create([
                         'convocatoria_id' => $convocatoria->id,
                         'sede_id' => $o['sede_id'],
                         'cargo_id' => $o['cargo_id'],
