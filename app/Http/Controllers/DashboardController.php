@@ -60,7 +60,7 @@ class DashboardController extends Controller
         }
 
         $conteosRaw = $sedeQuery->get();
-        $sedeIds = $conteosRaw->pluck('sede_id')->toArray();
+        $sedeIds = $conteosRaw->pluck('sede_id')->filter()->unique()->toArray();
         $sedesInfo = Sede::whereIn('id_sede', $sedeIds)->get(['id_sede', 'nombre'])->keyBy('id_sede');
 
         $porSede = $conteosRaw->map(function($row) use ($sedesInfo) {
@@ -120,14 +120,14 @@ class DashboardController extends Controller
 
         // 5. Actividad Reciente
         $qReciente = Postulacion::query();
+        $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'oferta.convocatoria', 'evaluacion']);
         if ($this->shouldLimitByConvocatoria($user)) {
-            $qReciente->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
+            $query->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
         } elseif (!empty($allowedSedes)) {
-            $qReciente->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
+            $query->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
         }
 
-        $actividadReciente = $qReciente->with(['postulante:id,nombres,apellidos', 'oferta.cargo:id,nombre', 'oferta.sede:id_sede,nombre'])
-            ->latest()
+        $actividadReciente = $query->latest()
             ->take(10)
             ->get();
 
