@@ -96,8 +96,10 @@ class DashboardController extends Controller
         ->get();
 
         $cargosPostulados = $topOfertas->map(function($oferta) {
+            $cargoNombre = $oferta->cargo->nombre ?? 'Cargo #' . $oferta->cargo_id;
+            $sedeNombre = $oferta->sede->nombre ?? 'Sede #' . $oferta->sede_id;
             return [
-                'nombre' => $oferta->cargo->nombre . ' - ' . $oferta->sede->nombre,
+                'nombre' => $cargoNombre . ' - ' . $sedeNombre,
                 'postulaciones_count' => $oferta->postulaciones_count
             ];
         });
@@ -140,7 +142,15 @@ class DashboardController extends Controller
             'chart_sede' => $porSede,
             'chart_cargos' => $cargosPostulados,
             'cierres_criticos' => $proximosCierres,
-            'recientes' => $actividadReciente
+            'recientes' => $actividadReciente->map(function($p) {
+                return [
+                    'id' => $p->id,
+                    'postulante' => $p->postulante->nombres . ' ' . $p->postulante->apellidos,
+                    'cargo' => $p->oferta->cargo->nombre ?? 'Cargo N/A',
+                    'sede' => $p->oferta->sede->nombre ?? 'Sede N/A',
+                    'fecha' => $p->created_at->diffForHumans(),
+                ];
+            })
         ]);
     }
 

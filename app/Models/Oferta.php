@@ -22,7 +22,7 @@ class Oferta extends Model
 
     public function sede()
     {
-        return $this->belongsTo(Sede::class);
+        return $this->belongsTo(Sede::class, 'sede_id', 'id_sede');
     }
 
     public function cargo()

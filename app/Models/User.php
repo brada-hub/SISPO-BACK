@@ -134,7 +134,7 @@ class User extends Authenticatable implements JWTSubject
 
     public function sede()
     {
-        return $this->belongsTo(Sede::class);
+        return $this->belongsTo(Sede::class, 'sede_id', 'id_sede');
     }
 
     /**
