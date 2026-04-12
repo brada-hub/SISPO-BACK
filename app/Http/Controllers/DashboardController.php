@@ -61,7 +61,7 @@ class DashboardController extends Controller
 
         $conteosRaw = $sedeQuery->get();
         $sedeIds = $conteosRaw->pluck('sede_id')->toArray();
-        $sedesInfo = Sede::whereIn('id', $sedeIds)->get(['id', 'nombre'])->keyBy('id');
+        $sedesInfo = Sede::whereIn('id_sede', $sedeIds)->get(['id_sede', 'nombre'])->keyBy('id_sede');
 
         $porSede = $conteosRaw->map(function($row) use ($sedesInfo) {
             $sede = $sedesInfo[$row->sede_id] ?? null;
@@ -90,7 +90,7 @@ class DashboardController extends Controller
                    ->whereDate('fecha_cierre', '>=', $hoy);
              });
         }])
-        ->with(['cargo:id,nombre', 'sede:id,nombre'])
+        ->with(['cargo:id,nombre', 'sede:id_sede,nombre'])
         ->orderBy('postulaciones_count', 'desc')
         ->take(10)
         ->get();
@@ -124,7 +124,7 @@ class DashboardController extends Controller
             $qReciente->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
         }
 
-        $actividadReciente = $qReciente->with(['postulante:id,nombres,apellidos', 'oferta.cargo:id,nombre', 'oferta.sede:id,nombre'])
+        $actividadReciente = $qReciente->with(['postulante:id,nombres,apellidos', 'oferta.cargo:id,nombre', 'oferta.sede:id_sede,nombre'])
             ->latest()
             ->take(10)
             ->get();

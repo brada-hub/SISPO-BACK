@@ -396,7 +396,7 @@ class PortalController extends Controller
                 'apellidos' => 'required|string|max:255',
                 'email' => 'required|email|max:255',
                 'email_institucional' => 'nullable|email|max:255',
-                'sede_id' => 'nullable|exists:core.sedes,id',
+                'sede_id' => 'nullable|exists:core.sedes,id_sede',
                 'celular' => 'nullable|string|max:20',
                 'nacionalidad' => 'nullable|string|max:50',
                 'direccion_domicilio' => 'nullable|string|max:500',
