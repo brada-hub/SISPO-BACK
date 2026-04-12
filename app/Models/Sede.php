@@ -12,6 +12,13 @@ class Sede extends Model
 
     protected $fillable = ['nombre', 'departamento', 'sigla', 'activo'];
 
+    protected $appends = ['id'];
+
+    public function getIdAttribute()
+    {
+        return $this->id_sede;
+    }
+
     public function ofertas()
     {
         return $this->hasMany(Oferta::class);
