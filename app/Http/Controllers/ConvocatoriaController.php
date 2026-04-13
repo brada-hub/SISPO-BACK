@@ -119,69 +119,84 @@ class ConvocatoriaController extends Controller
 
     public function update(Request $request, Convocatoria $convocatoria)
     {
-        $validated = $request->validate([
-            'titulo' => 'required|string|max:255',
-            'codigo_interno' => 'nullable|string|max:50',
-            'descripcion' => 'nullable|string',
-            'contenido_detalle' => 'nullable|string',
-            'fecha_inicio' => 'required|date',
-            'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
-            'hora_limite' => 'nullable',
-            'config_requisitos_ids' => 'nullable|array',
-            'requisitos_opcionales' => 'nullable|array',
-            'requisitos_afiche' => 'nullable|array',
-            'matriz_evaluacion' => 'nullable|array',
-            'ofertas' => 'required|array|min:1',
-            'ofertas.*.sede_id' => 'required|exists:sedes,id_sede',
-            'ofertas.*.cargo_id' => 'required|exists:cargos,id',
-        ]);
-
-        return DB::transaction(function () use ($validated, $convocatoria) {
-            $convocatoria->update([
-                'titulo' => $validated['titulo'],
-                'codigo_interno' => $validated['codigo_interno'],
-                'descripcion' => $validated['descripcion'],
-                'contenido_detalle' => $validated['contenido_detalle'] ?? null,
-                'fecha_inicio' => $validated['fecha_inicio'],
-                'fecha_cierre' => $validated['fecha_cierre'],
-                'hora_limite' => $validated['hora_limite'],
-                'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
-                'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
-                'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
-                'matriz_evaluacion' => $validated['matriz_evaluacion'] ?? null,
+        try {
+            $validated = $request->validate([
+                'titulo' => 'required|string|max:255',
+                'codigo_interno' => 'nullable|string|max:50',
+                'descripcion' => 'nullable|string',
+                'contenido_detalle' => 'nullable|string',
+                'fecha_inicio' => 'required|date',
+                'fecha_cierre' => 'required|date|after_or_equal:fecha_inicio',
+                'hora_limite' => 'nullable',
+                'config_requisitos_ids' => 'nullable|array',
+                'requisitos_opcionales' => 'nullable|array',
+                'requisitos_afiche' => 'nullable|array',
+                'matriz_evaluacion' => 'nullable|array',
+                'ofertas' => 'required|array|min:1',
+                'ofertas.*.sede_id' => 'required|exists:sedes,id_sede',
+                'ofertas.*.cargo_id' => 'required|exists:cargos,id',
             ]);
 
-            // Sync Ofertas correctly to prevent CASCADE DELETE of postulaciones
-            $existingOfertas = $convocatoria->ofertas()->get();
-            $keptOfertaIds = [];
+            return DB::transaction(function () use ($validated, $convocatoria) {
+                $convocatoria->update([
+                    'titulo' => $validated['titulo'],
+                    'codigo_interno' => $validated['codigo_interno'],
+                    'descripcion' => $validated['descripcion'],
+                    'contenido_detalle' => $validated['contenido_detalle'] ?? null,
+                    'fecha_inicio' => $validated['fecha_inicio'],
+                    'fecha_cierre' => $validated['fecha_cierre'],
+                    'hora_limite' => $validated['hora_limite'],
+                    'config_requisitos_ids' => $validated['config_requisitos_ids'] ?? [],
+                    'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
+                    'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
+                    'matriz_evaluacion' => $validated['matriz_evaluacion'] ?? null,
+                ]);
 
-            foreach ($validated['ofertas'] as $o) {
-                $oferta = $existingOfertas->firstWhere(function ($val) use ($o) {
-                    return $val->sede_id == $o['sede_id'] && $val->cargo_id == $o['cargo_id'];
-                });
+                // Sync Ofertas correctly to prevent CASCADE DELETE of postulaciones
+                $existingOfertas = $convocatoria->ofertas()->get();
+                $keptOfertaIds = [];
 
-                if ($oferta) {
-                    // Update existing to avoid changing its ID
-                    $oferta->update(['vacantes' => $o['vacantes'] ?? 1]);
-                    $keptOfertaIds[] = $oferta->id;
-                } else {
-                    // Create new
-                    $newOferta = Oferta::create([
-                        'convocatoria_id' => $convocatoria->id,
-                        'sede_id' => $o['sede_id'],
-                        'cargo_id' => $o['cargo_id'],
-                        'vacantes' => $o['vacantes'] ?? 1,
-                    ]);
-                    $keptOfertaIds[] = $newOferta->id;
+                foreach ($validated['ofertas'] as $o) {
+                    $oferta = $existingOfertas->firstWhere(function ($val) use ($o) {
+                        return $val->sede_id == $o['sede_id'] && $val->cargo_id == $o['cargo_id'];
+                    });
+
+                    if ($oferta) {
+                        // Update existing to avoid changing its ID
+                        $oferta->update(['vacantes' => $o['vacantes'] ?? 1]);
+                        $keptOfertaIds[] = $oferta->id;
+                    } else {
+                        // Create new
+                        $newOferta = Oferta::create([
+                            'convocatoria_id' => $convocatoria->id,
+                            'sede_id' => $o['sede_id'],
+                            'cargo_id' => $o['cargo_id'],
+                            'vacantes' => $o['vacantes'] ?? 1,
+                        ]);
+                        $keptOfertaIds[] = $newOferta->id;
+                    }
                 }
-            }
 
-            // Delete only ofertas that were explicitly removed from the configuration
-            // Note: If an oferta had postulaciones and the admin removed it, it WILL cascade delete those. 
-            $convocatoria->ofertas()->whereNotIn('id', $keptOfertaIds)->delete();
+                // Delete only ofertas that were explicitly removed from the configuration
+                $convocatoria->ofertas()->whereNotIn('id', $keptOfertaIds)->delete();
 
-            return $convocatoria->load(['ofertas.sede', 'ofertas.cargo']);
-        });
+                return $convocatoria->load(['ofertas.sede', 'ofertas.cargo']);
+            });
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error("Error actualizando convocatoria {$convocatoria->id}: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error interno al actualizar la convocatoria: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function destroy(Convocatoria $convocatoria)

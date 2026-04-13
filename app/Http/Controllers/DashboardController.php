@@ -145,10 +145,12 @@ class DashboardController extends Controller
             'recientes' => $actividadReciente->map(function($p) {
                 return [
                     'id' => $p->id,
-                    'postulante' => $p->postulante->nombres . ' ' . $p->postulante->apellidos,
+                    'postulante' => ($p->postulante) 
+                        ? ($p->postulante->nombres . ' ' . $p->postulante->apellidos) 
+                        : 'Postulante no identificado',
                     'cargo' => $p->oferta->cargo->nombre ?? 'Cargo N/A',
                     'sede' => $p->oferta->sede->nombre ?? 'Sede N/A',
-                    'fecha' => $p->created_at->diffForHumans(),
+                    'fecha' => $p->created_at ? $p->created_at->diffForHumans() : 'Fecha N/A',
                 ];
             })
         ]);
