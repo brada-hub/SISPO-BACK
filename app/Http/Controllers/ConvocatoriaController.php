@@ -60,7 +60,7 @@ class ConvocatoriaController extends Controller
             'requisitos_afiche' => 'nullable|array',
             'matriz_evaluacion' => 'nullable|array',
             'ofertas' => 'required|array|min:1',
-            'ofertas.*.sede_id' => 'required|exists:sedes,id_sede',
+            'ofertas.*.sede_id' => 'required|exists:sedes,id',
             'ofertas.*.cargo_id' => 'required|exists:cargos,id',
         ]);
 
@@ -133,7 +133,7 @@ class ConvocatoriaController extends Controller
                 'requisitos_afiche' => 'nullable|array',
                 'matriz_evaluacion' => 'nullable|array',
                 'ofertas' => 'required|array|min:1',
-                'ofertas.*.sede_id' => 'required|exists:sedes,id_sede',
+                'ofertas.*.sede_id' => 'required|exists:sedes,id',
                 'ofertas.*.cargo_id' => 'required|exists:cargos,id',
             ]);
 
