@@ -82,6 +82,7 @@ Route::middleware('shared.sanctum')->group(function () {
     // 🔓 Rutas especiales para demo
     // Usuarios
     Route::get('usuarios', [\App\Http\Controllers\UserController::class, 'index']);
+    Route::get('usuarios/{usuario}', [\App\Http\Controllers\UserController::class, 'show']);
     Route::post('usuarios', [\App\Http\Controllers\UserController::class, 'store']);
     Route::put('usuarios/{usuario}', [\App\Http\Controllers\UserController::class, 'update']);
     Route::delete('usuarios/{usuario}', [\App\Http\Controllers\UserController::class, 'destroy']);

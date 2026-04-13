@@ -57,6 +57,42 @@ class UserController extends Controller
         return response()->json($users);
     }
 
+    public function show(User $usuario)
+    {
+        $role = $usuario->roles->first();
+
+        return response()->json([
+            'id' => $usuario->id_user,
+            'id_user' => $usuario->id_user,
+            'username' => $usuario->username,
+            'activo' => (bool) $usuario->activo,
+            'convocatoria_scope' => $usuario->convocatoria_scope ?? [],
+            'password_segura' => !(bool) $usuario->must_change_password,
+            'nombres' => $usuario->persona?->nombres,
+            'apellido_paterno' => $usuario->persona?->apellido_paterno,
+            'apellido_materno' => $usuario->persona?->apellido_materno,
+            'ci' => $usuario->persona?->ci ?: $usuario->username,
+            'rol' => $role ? [
+                'id' => $role->id ?? $role->id_rol ?? null,
+                'name' => $role->name ?? $role->nombre ?? null,
+                'nombre' => $role->nombre ?? $role->name ?? null,
+            ] : null,
+            'sede' => $usuario->sede ? [
+                'id' => $usuario->sede->id ?? $usuario->sede->id_sede ?? null,
+                'nombre' => $usuario->sede->nombre ?? $usuario->sede->sede ?? null,
+            ] : null,
+            'persona' => $usuario->persona ? [
+                'id' => $usuario->persona->id,
+                'nombres' => $usuario->persona->nombres,
+                'apellido_paterno' => $usuario->persona->apellido_paterno,
+                'apellido_materno' => $usuario->persona->apellido_materno,
+                'ci' => $usuario->persona->ci,
+                'foto' => $usuario->persona->foto,
+                'foto_url' => $usuario->persona->foto_url,
+            ] : null,
+        ]);
+    }
+
     public function store(Request $request)
     {
         return response()->json([
@@ -66,21 +102,39 @@ class UserController extends Controller
 
     public function update(Request $request, User $usuario)
     {
-        $validated = $request->validate([
-            'activo' => 'sometimes|boolean',
-            'convocatoria_scope' => 'nullable|array',
-            'convocatoria_scope.*' => 'integer|exists:mysql.convocatorias,id',
-        ]);
+        try {
+            $validated = $request->validate([
+                'activo' => 'sometimes|boolean',
+                'convocatoria_scope' => 'nullable|array',
+                'convocatoria_scope.*' => 'integer|exists:mysql.convocatorias,id',
+            ]);
 
-        $usuario->update([
-            'activo' => $validated['activo'] ?? $usuario->activo,
-            'convocatoria_scope' => $validated['convocatoria_scope'] ?? [],
-        ]);
+            $usuario->update([
+                'activo' => $validated['activo'] ?? $usuario->activo,
+                'convocatoria_scope' => array_values(array_unique(array_map('intval', $validated['convocatoria_scope'] ?? []))),
+            ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Alcance por convocatoria actualizado correctamente.',
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Alcance por convocatoria actualizado correctamente.',
+                'user' => $usuario
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Throwable $e) {
+            \Log::error("Error actualizando usuario SISPO {$usuario->id_user}: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request' => $request->all()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error interno al actualizar el usuario: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function changePassword(Request $request)
