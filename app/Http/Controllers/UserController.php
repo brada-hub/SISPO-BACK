@@ -96,7 +96,7 @@ class UserController extends Controller
     public function store(Request $request)
     {
         return response()->json([
-            'message' => 'Los usuarios de SISPO se gestionan desde el SSO/SIGETH. Aqu� solo se administra el alcance por convocatoria.'
+            'message' => 'Los usuarios de SISPO se gestionan desde el SSO/SIGETH. Aquí solo se administra el alcance por convocatoria.'
         ], 422);
     }
 

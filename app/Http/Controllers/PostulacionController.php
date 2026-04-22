@@ -20,7 +20,13 @@ class PostulacionController extends Controller
         $user = auth()->user();
         $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
         $allowedSedes = $this->allowedSedeIds($user);
-        $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'evaluacion']);
+        $query = Postulacion::with([
+            'postulante.meritos.tipoDocumento',
+            'oferta.cargo',
+            'oferta.sede',
+            'oferta.convocatoria',
+            'evaluacion'
+        ]);
 
         if ($this->shouldLimitByConvocatoria($user)) {
             $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
@@ -58,7 +64,13 @@ class PostulacionController extends Controller
         $user = auth()->user();
         $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
         $allowedSedes = $this->allowedSedeIds($user);
-        $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'evaluacion']);
+        $query = Postulacion::with([
+            'postulante.meritos.tipoDocumento',
+            'oferta.cargo',
+            'oferta.sede',
+            'oferta.convocatoria',
+            'evaluacion'
+        ]);
 
         if ($this->shouldLimitByConvocatoria($user)) {
             $query->whereHas('oferta', function ($q) use ($allowedConvocatorias) {
@@ -143,7 +155,13 @@ class PostulacionController extends Controller
             $user = auth()->user();
             $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
             $allowedSedes = $this->allowedSedeIds($user);
-            $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'evaluacion'])
+            $query = Postulacion::with([
+                'postulante.meritos.tipoDocumento',
+                'oferta.cargo',
+                'oferta.sede',
+                'oferta.convocatoria',
+                'evaluacion'
+            ])
                 ->whereHas('oferta', function($q) use ($convocatoriaId, $user, $allowedConvocatorias, $allowedSedes) {
                     $q->where('convocatoria_id', $convocatoriaId);
                     if ($this->shouldLimitByConvocatoria($user)) {
