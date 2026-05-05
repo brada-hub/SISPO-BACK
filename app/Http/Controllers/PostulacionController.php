@@ -396,7 +396,17 @@ class PostulacionController extends Controller
     public function destroy($id)
     {
         $user = auth()->user();
-        if (!$user || $user->rol->nombre !== 'ADMINISTRADOR') {
+
+        if (!$user) {
+            return response()->json(['message' => 'No autenticado'], 401);
+        }
+
+        // Allow admins or users with management permissions
+        $hasPermission = $user->isAdminUser()
+            || $user->can('usuarios')
+            || $user->can('roles');
+
+        if (!$hasPermission) {
             return response()->json(['message' => 'No tiene permisos para eliminar postulaciones'], 403);
         }
 

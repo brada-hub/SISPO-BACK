@@ -91,6 +91,12 @@ class PortalController extends Controller
      */
     public function postular(Request $request)
     {
+        $startTotal = microtime(true);
+        \Log::info('=== POSTULAR START ===', [
+            'ip' => $request->ip(),
+            'content_length' => $request->header('Content-Length'),
+            'files_count' => count($request->allFiles()),
+        ]);
         try {
             $validated = $request->validate([
                 // Offer selection - NOW ACCEPTS ARRAY
@@ -141,7 +147,9 @@ class PortalController extends Controller
             ], 422);
         }
 
-        return DB::transaction(function () use ($validated, $request) {
+        \Log::info('POSTULAR: Validación OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+
+        return DB::transaction(function () use ($validated, $request, $startTotal) {
             try {
                 $hoy = now()->toDateString();
 
@@ -156,6 +164,8 @@ class PortalController extends Controller
                     $nombres = $ofertasInvalidas->map(fn($o) => $o->cargo->nombre)->join(', ');
                     throw new \Exception("La(s) convocatoria(s) para: [{$nombres}] ya no se encuentran vigentes o han cerrado.");
                 }
+
+                \Log::info('POSTULAR: Convocatorias verificadas', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
 
                 // 2. Create or update Postulante local
                 $postulante = Postulante::updateOrCreate(
@@ -177,6 +187,8 @@ class PortalController extends Controller
                     ]
                 );
 
+
+                \Log::info('POSTULAR: Postulante creado/actualizado', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms', 'postulante_id' => $postulante->id]);
 
                 // 3. Handle file uploads
                 if ($request->hasFile('foto_perfil')) {
@@ -201,6 +213,8 @@ class PortalController extends Controller
 
                 $postulante->save();
 
+
+                \Log::info('POSTULAR: Archivos personales subidos', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
 
                 // 4. Create ONE Postulacion per each oferta
                 $postulacionIds = [];
@@ -232,6 +246,8 @@ class PortalController extends Controller
                     $postulacionIds[] = $postulacion->id;
                 }
 
+                \Log::info('POSTULAR: Postulaciones creadas', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms', 'count' => count($postulacionIds)]);
+
                 // 5. Process Meritos
                 $meritos = $validated['meritos'] ?? [];
                 foreach ($meritos as $index => $meritoData) {
@@ -256,6 +272,14 @@ class PortalController extends Controller
                 }
 
                 $codigoBase = $validated['ci'];
+
+                $totalTime = round((microtime(true) - $startTotal) * 1000);
+                \Log::info('=== POSTULAR COMPLETE ===', [
+                    'ci' => $validated['ci'],
+                    'total_time' => $totalTime . 'ms',
+                    'postulaciones' => count($postulacionIds),
+                    'meritos' => count($meritos),
+                ]);
 
                 return response()->json([
                     'success' => true,
@@ -450,20 +474,24 @@ class PortalController extends Controller
                 // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
                 // ========================================================
                 $apellidos_parts = explode(' ', $validated['apellidos'], 2);
-                \App\Models\Persona::updateOrCreate(
-                    ['ci' => $validated['ci']],
-                    [
-                        'nombres'          => $validated['nombres'],
-                        'apellido_paterno' => $apellidos_parts[0] ?? '',
-                        'apellido_materno' => $apellidos_parts[1] ?? '',
-                        'ci_expedicion'    => $validated['ci_expedido'] ?? null,
-                        'correo_personal'  => $validated['email'],
-                        'celular'          => $validated['celular'] ?? null,
-                        'direccion'        => $validated['direccion_domicilio'] ?? null,
-                        'foto'             => $postulante->foto_perfil_path,
-                        'cv_path'          => $postulante->cv_pdf_path,
-                    ]
-                );
+                try {
+                    \App\Models\Persona::updateOrCreate(
+                        ['ci' => $validated['ci']],
+                        [
+                            'nombres'              => $validated['nombres'],
+                            'primer_apellido'      => $apellidos_parts[0] ?? '',
+                            'segundo_apellido'     => $apellidos_parts[1] ?? '',
+                            'id_ci_expedido'       => $validated['ci_expedido'] ?? null,
+                            'correo_personal'      => $validated['email'],
+                            'celular_personal'     => $validated['celular'] ?? null,
+                            'direccion_domicilio'  => $validated['direccion_domicilio'] ?? null,
+                            'foto'                 => $postulante->foto_perfil_path,
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    // Non-critical: log but don't fail the postulation
+                    \Log::warning('Persona sync failed for CI ' . $validated['ci'] . ': ' . $e->getMessage());
+                }
                 // ========================================================
                 // 3. Process Meritos
                 $meritosData = $request->input('meritos', []);
