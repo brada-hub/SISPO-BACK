@@ -88,7 +88,7 @@ class PostulacionController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $validated = $request->validate([
-            'estado' => 'required|in:enviada,en_revision,validada,observada,rechazada,seleccionado'
+            'estado' => 'required|in:pendiente_archivos,enviada,en_revision,validada,observada,rechazada,seleccionado'
         ]);
 
         $user = auth()->user();

@@ -11,8 +11,8 @@ use App\Models\Convocatoria;
 use App\Models\TipoDocumento;
 use App\Models\Sede;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
@@ -156,18 +156,12 @@ class PortalController extends Controller
                 'ofertas_detalle.*.oferta_id' => 'required|exists:ofertas,id',
                 'ofertas_detalle.*.pretension_salarial' => 'required|numeric|min:0',
                 'ofertas_detalle.*.porque_cargo' => 'required|string|max:1000',
-
-                // Files
-                'foto_perfil' => 'nullable|image|max:2048',
-                'ci_archivo' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:2048',
-                'cv_pdf' => 'nullable|file|mimes:pdf|max:2048',
-                'carta_postulacion' => 'nullable|file|mimes:pdf|max:2048',
+                'has_archivos' => 'nullable|boolean',
 
                 // Dynamic merits
                 'meritos' => 'nullable|array',
                 'meritos.*.tipo_documento_id' => 'required|exists:tipos_documento,id',
                 'meritos.*.respuestas' => 'nullable|array',
-                'meritos.*.archivos' => 'nullable|array',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -225,7 +219,7 @@ class PortalController extends Controller
             foreach ($validated['oferta_ids'] as $ofertaId) {
                 $existe = Postulacion::where('postulante_id', $postulante->id)
                     ->where('oferta_id', $ofertaId)
-                    ->whereIn('estado', ['enviada', 'en_revision', 'validada'])
+                    ->whereIn('estado', ['pendiente_archivos', 'enviada', 'en_revision', 'validada'])
                     ->exists();
 
                 if ($existe) {
@@ -241,7 +235,7 @@ class PortalController extends Controller
                     'oferta_id' => $ofertaId,
                     'pretension_salarial' => $detalle['pretension_salarial'] ?? $validated['pretension_salarial'],
                     'porque_cargo' => $detalle['porque_cargo'] ?? $validated['porque_cargo'],
-                    'estado' => 'enviada',
+                    'estado' => $request->boolean('has_archivos') ? 'pendiente_archivos' : 'enviada',
                     'fecha_postulacion' => now(),
                 ]);
                 $postulacionIds[] = $postulacion->id;
@@ -276,65 +270,15 @@ class PortalController extends Controller
         // ---------------------------------------------------------
         $postulante = $dbData['postulante'];
         $codigoBase = $postulante->ci;
+        $uploadToken = Crypt::encryptString(json_encode([
+            'postulante_id' => $postulante->id,
+            'postulacion_ids' => $dbData['postulacionIds'],
+            'exp' => now()->addMinutes(30)->timestamp,
+        ]));
 
         \Log::info('POSTULAR: DB completa, enviando respuesta inmediata', [
             'elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms'
         ]);
-
-        // Programar el procesamiento de archivos DESPUÉS de enviar la respuesta
-        app()->terminating(function () use ($dbData, $request, $startTotal) {
-            try {
-                $postulante = $dbData['postulante'];
-
-                // 1. Handle personal files
-                if ($request->hasFile('foto_perfil')) {
-                    $postulante->foto_perfil_path = $request->file('foto_perfil')->store('postulantes/fotos', 'public');
-                }
-                if ($request->hasFile('ci_archivo')) {
-                    $postulante->ci_archivo_path = $request->file('ci_archivo')->store('postulantes/ci', 'public');
-                }
-                if ($request->hasFile('cv_pdf')) {
-                    $postulante->cv_pdf_path = $request->file('cv_pdf')->store('postulantes/cv', 'public');
-                }
-                if ($request->hasFile('carta_postulacion')) {
-                    $postulante->carta_postulacion_path = $request->file('carta_postulacion')->store('postulantes/cartas', 'public');
-                }
-                $postulante->save();
-
-                \Log::info('POSTULAR [BACKGROUND]: Archivos personales OK', [
-                    'elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms'
-                ]);
-
-                // 2. Handle Merit files
-                foreach ($dbData['meritosCreated'] as $mInfo) {
-                    $index = $mInfo['index'];
-                    $meritoId = $mInfo['id'];
-
-                    if ($request->hasFile("meritos.{$index}.archivos")) {
-                        $archivos = $request->file("meritos.{$index}.archivos");
-                        foreach ($archivos as $configId => $archivo) {
-                            $path = $archivo->store("postulantes/meritos/{$postulante->id}", 'public');
-                            MeritoArchivo::create([
-                                'merito_id' => $meritoId,
-                                'config_archivo_id' => $configId,
-                                'archivo_path' => $path,
-                            ]);
-                        }
-                    }
-                }
-
-                \Log::info('POSTULAR [BACKGROUND]: Archivos méritos OK', [
-                    'elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms'
-                ]);
-
-
-                \Log::info('=== POSTULAR BACKGROUND COMPLETE ===', [
-                    'total_time' => round((microtime(true) - $startTotal) * 1000) . 'ms'
-                ]);
-            } catch (\Throwable $te) {
-                \Log::error("POSTULAR [BACKGROUND] Error archivos: " . $te->getMessage());
-            }
-        });
 
         return response()->json([
             'success' => true,
@@ -343,8 +287,102 @@ class PortalController extends Controller
                 'postulante_id' => $postulante->id,
                 'postulacion_ids' => $dbData['postulacionIds'],
                 'codigo_seguimiento' => $codigoBase,
+                'upload_token' => $uploadToken,
+                'meritos_upload' => $dbData['meritosCreated'],
             ]
         ], 201);
+    }
+
+    /**
+     * Upload files after the postulation data has already been saved.
+     * This keeps the public submit fast and avoids browser network timeouts.
+     */
+    public function subirArchivosPostulacion(Request $request)
+    {
+        $validated = $request->validate([
+            'postulante_id' => 'required|integer|exists:postulantes,id',
+            'upload_token' => 'required|string',
+            'foto_perfil' => 'nullable|image|max:5120',
+            'ci_archivo' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:5120',
+            'cv_pdf' => 'nullable|file|mimes:pdf|max:5120',
+            'carta_postulacion' => 'nullable|file|mimes:pdf|max:5120',
+            'meritos' => 'nullable|array',
+            'meritos.*.merito_id' => 'required_with:meritos|integer|exists:postulante_meritos,id',
+            'meritos.*.archivos' => 'nullable|array',
+            'meritos.*.archivos.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        try {
+            $payload = json_decode(Crypt::decryptString($validated['upload_token']), true);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token de subida invalido.',
+            ], 403);
+        }
+
+        if (
+            !is_array($payload)
+            || (int) ($payload['postulante_id'] ?? 0) !== (int) $validated['postulante_id']
+            || (int) ($payload['exp'] ?? 0) < now()->timestamp
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token de subida vencido o no corresponde al postulante.',
+            ], 403);
+        }
+
+        $postulante = Postulante::findOrFail($validated['postulante_id']);
+
+        DB::transaction(function () use ($request, $postulante, $payload) {
+            if ($request->hasFile('foto_perfil')) {
+                $postulante->foto_perfil_path = $request->file('foto_perfil')->store('postulantes/fotos', 'public');
+            }
+            if ($request->hasFile('ci_archivo')) {
+                $postulante->ci_archivo_path = $request->file('ci_archivo')->store('postulantes/ci', 'public');
+            }
+            if ($request->hasFile('cv_pdf')) {
+                $postulante->cv_pdf_path = $request->file('cv_pdf')->store('postulantes/cv', 'public');
+            }
+            if ($request->hasFile('carta_postulacion')) {
+                $postulante->carta_postulacion_path = $request->file('carta_postulacion')->store('postulantes/cartas', 'public');
+            }
+            $postulante->save();
+
+            foreach ($request->input('meritos', []) as $index => $meritoData) {
+                $merito = PostulanteMerito::where('id', $meritoData['merito_id'] ?? null)
+                    ->where('postulante_id', $postulante->id)
+                    ->first();
+
+                if (!$merito || !$request->hasFile("meritos.{$index}.archivos")) {
+                    continue;
+                }
+
+                foreach ($request->file("meritos.{$index}.archivos") as $configId => $archivo) {
+                    $path = $archivo->store("postulantes/meritos/{$postulante->id}", 'public');
+                    MeritoArchivo::updateOrCreate(
+                        [
+                            'merito_id' => $merito->id,
+                            'config_archivo_id' => $configId,
+                        ],
+                        ['archivo_path' => $path]
+                    );
+                }
+            }
+
+            $postulacionIds = array_filter(array_map('intval', $payload['postulacion_ids'] ?? []));
+            if (!empty($postulacionIds)) {
+                Postulacion::whereIn('id', $postulacionIds)
+                    ->where('postulante_id', $postulante->id)
+                    ->where('estado', 'pendiente_archivos')
+                    ->update(['estado' => 'enviada']);
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Archivos de postulacion cargados correctamente.',
+        ]);
     }
 
     /**
@@ -508,29 +546,6 @@ class PortalController extends Controller
                 }
                 $postulante->save();
 
-                // ========================================================
-                // NÚCLEO CENTRAL (SSO): Sincronizar datos con Personas
-                // ========================================================
-                $apellidos_parts = explode(' ', $validated['apellidos'], 2);
-                try {
-                    \App\Models\Persona::updateOrCreate(
-                        ['ci' => $validated['ci']],
-                        [
-                            'nombres'              => $validated['nombres'],
-                            'primer_apellido'      => $apellidos_parts[0] ?? '',
-                            'segundo_apellido'     => $apellidos_parts[1] ?? '',
-                            'id_ci_expedido'       => $validated['ci_expedido'] ?? null,
-                            'correo_personal'      => $validated['email'],
-                            'celular_personal'     => $validated['celular'] ?? null,
-                            'direccion_domicilio'  => $validated['direccion_domicilio'] ?? null,
-                            'foto'                 => $postulante->foto_perfil_path,
-                        ]
-                    );
-                } catch (\Throwable $e) {
-                    // Non-critical: log but don't fail the postulation
-                    \Log::warning('Persona sync failed for CI ' . $validated['ci'] . ': ' . $e->getMessage());
-                }
-                // ========================================================
                 // 3. Process Meritos
                 $meritosData = $request->input('meritos', []);
                 foreach ($meritosData as $index => $mData) {

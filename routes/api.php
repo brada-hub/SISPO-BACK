@@ -25,6 +25,7 @@ Route::prefix('portal')->group(function () {
 
     // Submit application
     Route::post('/postular', [PortalController::class, 'postular']);
+    Route::post('/postular-archivos', [PortalController::class, 'subirArchivosPostulacion']);
 
     // Check status by CI
     Route::get('/consultar/{ci}', [PortalController::class, 'consultar']);
