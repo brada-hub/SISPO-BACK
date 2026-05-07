@@ -327,26 +327,6 @@ class PortalController extends Controller
                     'elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms'
                 ]);
 
-                // 3. Sincronización con SIGETH
-                $apellidos_parts = explode(' ', $postulante->apellidos, 2);
-                try {
-                    \App\Models\Persona::updateOrCreate(
-                        ['ci' => $postulante->ci],
-                        [
-                            'nombres'              => $postulante->nombres,
-                            'primer_apellido'      => $apellidos_parts[0] ?? '',
-                            'segundo_apellido'     => $apellidos_parts[1] ?? '',
-                            'id_ci_expedido'       => $postulante->ci_expedido,
-                            'correo_personal'      => $postulante->email,
-                            'celular_personal'     => $postulante->celular,
-                            'direccion_domicilio'  => $postulante->direccion_domicilio,
-                            'foto'                 => $postulante->foto_perfil_path,
-                        ]
-                    );
-                    \Log::info('POSTULAR [BACKGROUND]: Sync SIGETH OK');
-                } catch (\Throwable $e) {
-                    \Log::warning('POSTULAR [BACKGROUND]: Sync SIGETH Falló: ' . $e->getMessage());
-                }
 
                 \Log::info('=== POSTULAR BACKGROUND COMPLETE ===', [
                     'total_time' => round((microtime(true) - $startTotal) * 1000) . 'ms'
