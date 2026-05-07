@@ -167,7 +167,7 @@ class PortalController extends Controller
 
                 \Log::info('POSTULAR: Convocatorias verificadas', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
 
-                // 2. Create or update Postulante local
+                // 2. Create or update Postulante local (DB only, no files yet)
                 $postulante = Postulante::updateOrCreate(
                     ['ci' => $validated['ci']],
                     [
@@ -187,41 +187,13 @@ class PortalController extends Controller
                     ]
                 );
 
+                \Log::info('POSTULAR: Postulante DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
 
-                \Log::info('POSTULAR: Postulante creado/actualizado', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms', 'postulante_id' => $postulante->id]);
-
-                // 3. Handle file uploads
-                if ($request->hasFile('foto_perfil')) {
-                    $path = $request->file('foto_perfil')->store('postulantes/fotos', 'public');
-                    $postulante->foto_perfil_path = $path;
-                }
-
-                if ($request->hasFile('ci_archivo')) {
-                    $path = $request->file('ci_archivo')->store('postulantes/ci', 'public');
-                    $postulante->ci_archivo_path = $path;
-                }
-
-                if ($request->hasFile('cv_pdf')) {
-                    $path = $request->file('cv_pdf')->store('postulantes/cv', 'public');
-                    $postulante->cv_pdf_path = $path;
-                }
-
-                if ($request->hasFile('carta_postulacion')) {
-                    $path = $request->file('carta_postulacion')->store('postulantes/cartas', 'public');
-                    $postulante->carta_postulacion_path = $path;
-                }
-
-                $postulante->save();
-
-
-                \Log::info('POSTULAR: Archivos personales subidos', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
-
-                // 4. Create ONE Postulacion per each oferta
+                // 3. Create ONE Postulacion per each oferta (DB only)
                 $postulacionIds = [];
                 $ofertasData = $request->input('ofertas_detalle', []);
 
                 foreach ($validated['oferta_ids'] as $ofertaId) {
-                    // Evitar duplicados de postulación activa para el mismo postulante y oferta
                     $existe = Postulacion::where('postulante_id', $postulante->id)
                         ->where('oferta_id', $ofertaId)
                         ->whereIn('estado', ['enviada', 'en_revision', 'validada'])
@@ -246,9 +218,10 @@ class PortalController extends Controller
                     $postulacionIds[] = $postulacion->id;
                 }
 
-                \Log::info('POSTULAR: Postulaciones creadas', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms', 'count' => count($postulacionIds)]);
+                \Log::info('POSTULAR: Postulaciones DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
 
-                // 5. Process Meritos
+                // 4. Process Meritos (DB only)
+                $meritosCreated = [];
                 $meritos = $validated['meritos'] ?? [];
                 foreach ($meritos as $index => $meritoData) {
                     $merito = PostulanteMerito::create([
@@ -257,56 +230,114 @@ class PortalController extends Controller
                         'respuestas' => $meritoData['respuestas'] ?? [],
                         'estado_verificacion' => 'pendiente',
                     ]);
-
-                    if ($request->hasFile("meritos.{$index}.archivos")) {
-                        $archivos = $request->file("meritos.{$index}.archivos");
-                        foreach ($archivos as $configId => $archivo) {
-                            $path = $archivo->store("postulantes/meritos/{$postulante->id}", 'public');
-                            MeritoArchivo::create([
-                                'merito_id' => $merito->id,
-                                'config_archivo_id' => $configId,
-                                'archivo_path' => $path,
-                            ]);
-                        }
-                    }
+                    $meritosCreated[] = ['id' => $merito->id, 'index' => $index];
                 }
 
-                $codigoBase = $validated['ci'];
+                \Log::info('POSTULAR: Meritos DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
 
-                $totalTime = round((microtime(true) - $startTotal) * 1000);
-                \Log::info('=== POSTULAR COMPLETE ===', [
-                    'ci' => $validated['ci'],
-                    'total_time' => $totalTime . 'ms',
-                    'postulaciones' => count($postulacionIds),
-                    'meritos' => count($meritos),
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Postulación registrada exitosamente.',
-                    'data' => [
-                        'postulante_id' => $postulante->id,
-                        'postulacion_ids' => $postulacionIds,
-                        'cantidad_cargos' => count($postulacionIds),
-                        'codigo_seguimiento' => $codigoBase,
-                    ]
-                ], 201);
-
+                return [
+                    'postulante' => $postulante,
+                    'postulacionIds' => $postulacionIds,
+                    'meritosCreated' => $meritosCreated
+                ];
             } catch (\Exception $e) {
                 DB::rollBack();
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage()
-                ], 400);
-            } catch (\Throwable $te) {
-                DB::rollBack();
-                \Log::error("Error crítico en postulación: " . $te->getMessage());
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error interno crítico al procesar la solicitud. Por favor contacte a soporte.'
-                ], 500);
+                throw $e;
             }
         });
+
+        // ---------------------------------------------------------
+        // FUERA DE LA TRANSACCIÓN: Procesamiento de Archivos Pesados
+        // ---------------------------------------------------------
+        try {
+            $dbData = $result;
+            $postulante = $dbData['postulante'];
+
+            // 1. Handle personal files
+            if ($request->hasFile('foto_perfil')) {
+                $postulante->foto_perfil_path = $request->file('foto_perfil')->store('postulantes/fotos', 'public');
+            }
+            if ($request->hasFile('ci_archivo')) {
+                $postulante->ci_archivo_path = $request->file('ci_archivo')->store('postulantes/ci', 'public');
+            }
+            if ($request->hasFile('cv_pdf')) {
+                $postulante->cv_pdf_path = $request->file('cv_pdf')->store('postulantes/cv', 'public');
+            }
+            if ($request->hasFile('carta_postulacion')) {
+                $postulante->carta_postulacion_path = $request->file('carta_postulacion')->store('postulantes/cartas', 'public');
+            }
+            $postulante->save();
+
+            \Log::info('POSTULAR: Archivos personales OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+
+            // 2. Handle Merit files
+            foreach ($dbData['meritosCreated'] as $mInfo) {
+                $index = $mInfo['index'];
+                $meritoId = $mInfo['id'];
+
+                if ($request->hasFile("meritos.{$index}.archivos")) {
+                    $archivos = $request->file("meritos.{$index}.archivos");
+                    foreach ($archivos as $configId => $archivo) {
+                        $path = $archivo->store("postulantes/meritos/{$postulante->id}", 'public');
+                        MeritoArchivo::create([
+                            'merito_id' => $meritoId,
+                            'config_archivo_id' => $configId,
+                            'archivo_path' => $path,
+                        ]);
+                    }
+                }
+            }
+
+            \Log::info('POSTULAR: Archivos méritos OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+
+            // 3. Sincronización con SIGETH (Opcional/Seguro)
+            $apellidos_parts = explode(' ', $postulante->apellidos, 2);
+            try {
+                \App\Models\Persona::updateOrCreate(
+                    ['ci' => $postulante->ci],
+                    [
+                        'nombres'              => $postulante->nombres,
+                        'primer_apellido'      => $apellidos_parts[0] ?? '',
+                        'segundo_apellido'     => $apellidos_parts[1] ?? '',
+                        'id_ci_expedido'       => $postulante->ci_expedido,
+                        'correo_personal'      => $postulante->email,
+                        'celular_personal'     => $postulante->celular,
+                        'direccion_domicilio'  => $postulante->direccion_domicilio,
+                        'foto'                 => $postulante->foto_perfil_path,
+                    ]
+                );
+                \Log::info('POSTULAR: Sync SIGETH OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+            } catch (\Throwable $e) {
+                \Log::warning('POSTULAR: Sync SIGETH Falló (No crítico): ' . $e->getMessage());
+            }
+
+            $codigoBase = $postulante->ci;
+            $totalTime = round((microtime(true) - $startTotal) * 1000);
+
+            \Log::info('=== POSTULAR COMPLETE ===', ['total_time' => $totalTime . 'ms']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Postulación registrada exitosamente.',
+                'data' => [
+                    'postulante_id' => $postulante->id,
+                    'postulacion_ids' => $dbData['postulacionIds'],
+                    'codigo_seguimiento' => $codigoBase,
+                ]
+            ], 201);
+
+        } catch (\Throwable $te) {
+            \Log::error("Error crítico en postulación (Archivos/Sync): " . $te->getMessage());
+            return response()->json([
+                'success' => true, // La DB ya se guardó, así que le decimos que OK pero con aviso interno
+                'message' => 'Postulación registrada, pero hubo un inconveniente al procesar algunos archivos.',
+                'data' => [
+                    'postulante_id' => $dbData['postulante']->id,
+                    'postulacion_ids' => $dbData['postulacionIds'],
+                ]
+            ], 201);
+        }
+    }
     }
 
     /**
