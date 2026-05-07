@@ -32,15 +32,23 @@ class PortalController extends Controller
             })
             ->get();
 
-        // Group by Sede
+        // Group by Sede and filter out those without a valid Sede object
         $grouped = $ofertas->groupBy('sede_id')->map(function ($sedeOfertas, $sedeId) {
-            $sede = $sedeOfertas->first()->sede;
+            $firstOferta = $sedeOfertas->first();
+            $sede = $firstOferta->sede;
+
+            if (!$sede) {
+                return null;
+            }
 
             return [
                 'id' => $sede->id,
                 'nombre' => $sede->nombre,
-                'departamento' => $sede->departamento,
+                'departamento' => $this->normalizeDepartamento($sede->departamento),
                 'cargos' => $sedeOfertas->map(function ($oferta) {
+                    if (!$oferta->cargo) {
+                        return null;
+                    }
                     return [
                         'oferta_id' => $oferta->id,
                         'convocatoria_id' => $oferta->convocatoria_id,
@@ -53,11 +61,33 @@ class PortalController extends Controller
                             'fecha_cierre' => $oferta->convocatoria->fecha_cierre,
                         ]
                     ];
-                })->values()
+                })->filter()->values()
             ];
-        })->values();
+        })->filter()->values();
 
         return response()->json($grouped);
+    }
+
+    /**
+     * Normalizes department names to match the frontend map GeoJSON
+     */
+    private function normalizeDepartamento($dept)
+    {
+        $dept = trim(mb_strtoupper($dept));
+        $map = [
+            'SANTA CRUZ' => 'Santa Cruz',
+            'COCHABAMBA' => 'Cochabamba',
+            'PANDO'      => 'Pando',
+            'BENI'       => 'Beni',
+            'LA PAZ'     => 'La Paz',
+            'ORURO'      => 'Oruro',
+            'POTOSI'     => 'Potosí',
+            'POTOSÍ'     => 'Potosí',
+            'CHUQUISACA' => 'Chuquisaca',
+            'TARIJA'     => 'Tarija',
+        ];
+
+        return $map[$dept] ?? mb_convert_case($dept, MB_CASE_TITLE, "UTF-8");
     }
 
     /**
@@ -149,108 +179,102 @@ class PortalController extends Controller
 
         \Log::info('POSTULAR: Validación OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
 
-        return DB::transaction(function () use ($validated, $request, $startTotal) {
-            try {
-                $hoy = now()->toDateString();
+        $dbData = DB::transaction(function () use ($validated, $request, $startTotal) {
+            $hoy = now()->toDateString();
 
-                // 1. Verificación de que las convocatorias siguen abiertas
-                $ofertasInvalidas = Oferta::whereIn('id', $validated['oferta_ids'])
-                    ->whereHas('convocatoria', function ($q) use ($hoy) {
-                        $q->where('fecha_inicio', '>', $hoy)
-                          ->orWhere('fecha_cierre', '<', $hoy);
-                    })->with('cargo')->get();
+            // 1. Verificación de que las convocatorias siguen abiertas
+            $ofertasInvalidas = Oferta::whereIn('id', $validated['oferta_ids'])
+                ->whereHas('convocatoria', function ($q) use ($hoy) {
+                    $q->where('fecha_inicio', '>', $hoy)
+                      ->orWhere('fecha_cierre', '<', $hoy);
+                })->with('cargo')->get();
 
-                if ($ofertasInvalidas->count() > 0) {
-                    $nombres = $ofertasInvalidas->map(fn($o) => $o->cargo->nombre)->join(', ');
-                    throw new \Exception("La(s) convocatoria(s) para: [{$nombres}] ya no se encuentran vigentes o han cerrado.");
-                }
-
-                \Log::info('POSTULAR: Convocatorias verificadas', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
-
-                // 2. Create or update Postulante local (DB only, no files yet)
-                $postulante = Postulante::updateOrCreate(
-                    ['ci' => $validated['ci']],
-                    [
-                        'ci_expedido' => $validated['ci_expedido'] ?? null,
-                        'nombres' => $validated['nombres'],
-                        'apellidos' => $validated['apellidos'],
-                        'nacionalidad' => $request->input('nacionalidad', 'Boliviana'),
-                        'direccion_domicilio' => $request->input('direccion_domicilio'),
-                        'email' => $request->input('email'),
-                        'celular' => $request->input('celular'),
-                        'ref_personal_celular' => $request->input('ref_personal_celular'),
-                        'ref_personal_parentesco' => $request->input('ref_personal_parentesco'),
-                        'ref_laboral_celular' => $request->input('ref_laboral_celular'),
-                        'ref_laboral_detalle' => $request->input('ref_laboral_detalle'),
-                        'pretension_salarial' => $validated['pretension_salarial'] ?? null,
-                        'porque_cargo' => $validated['porque_cargo'] ?? null,
-                    ]
-                );
-
-                \Log::info('POSTULAR: Postulante DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
-
-                // 3. Create ONE Postulacion per each oferta (DB only)
-                $postulacionIds = [];
-                $ofertasData = $request->input('ofertas_detalle', []);
-
-                foreach ($validated['oferta_ids'] as $ofertaId) {
-                    $existe = Postulacion::where('postulante_id', $postulante->id)
-                        ->where('oferta_id', $ofertaId)
-                        ->whereIn('estado', ['enviada', 'en_revision', 'validada'])
-                        ->exists();
-
-                    if ($existe) {
-                        $cargo = Oferta::find($ofertaId)->cargo->nombre;
-                        throw new \Exception("Usted ya tiene una postulación registrada y vigente para el cargo de: {$cargo}.");
-                    }
-
-                    $detalleRaw = collect($ofertasData)->firstWhere('oferta_id', $ofertaId);
-                    $detalle = is_array($detalleRaw) ? $detalleRaw : [];
-
-                    $postulacion = Postulacion::create([
-                        'postulante_id' => $postulante->id,
-                        'oferta_id' => $ofertaId,
-                        'pretension_salarial' => $detalle['pretension_salarial'] ?? $validated['pretension_salarial'],
-                        'porque_cargo' => $detalle['porque_cargo'] ?? $validated['porque_cargo'],
-                        'estado' => 'enviada',
-                        'fecha_postulacion' => now(),
-                    ]);
-                    $postulacionIds[] = $postulacion->id;
-                }
-
-                \Log::info('POSTULAR: Postulaciones DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
-
-                // 4. Process Meritos (DB only)
-                $meritosCreated = [];
-                $meritos = $validated['meritos'] ?? [];
-                foreach ($meritos as $index => $meritoData) {
-                    $merito = PostulanteMerito::create([
-                        'postulante_id' => $postulante->id,
-                        'tipo_documento_id' => $meritoData['tipo_documento_id'],
-                        'respuestas' => $meritoData['respuestas'] ?? [],
-                        'estado_verificacion' => 'pendiente',
-                    ]);
-                    $meritosCreated[] = ['id' => $merito->id, 'index' => $index];
-                }
-
-                \Log::info('POSTULAR: Meritos DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
-
-                return [
-                    'postulante' => $postulante,
-                    'postulacionIds' => $postulacionIds,
-                    'meritosCreated' => $meritosCreated
-                ];
-            } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
+            if ($ofertasInvalidas->count() > 0) {
+                $nombres = $ofertasInvalidas->map(fn($o) => $o->cargo->nombre)->join(', ');
+                throw new \Exception("La(s) convocatoria(s) para: [{$nombres}] ya no se encuentran vigentes o han cerrado.");
             }
+
+            \Log::info('POSTULAR: Convocatorias verificadas', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+
+            // 2. Create or update Postulante local (DB only, no files yet)
+            $postulante = Postulante::updateOrCreate(
+                ['ci' => $validated['ci']],
+                [
+                    'ci_expedido' => $validated['ci_expedido'] ?? null,
+                    'nombres' => $validated['nombres'],
+                    'apellidos' => $validated['apellidos'],
+                    'nacionalidad' => $request->input('nacionalidad', 'Boliviana'),
+                    'direccion_domicilio' => $request->input('direccion_domicilio'),
+                    'email' => $request->input('email'),
+                    'celular' => $request->input('celular'),
+                    'ref_personal_celular' => $request->input('ref_personal_celular'),
+                    'ref_personal_parentesco' => $request->input('ref_personal_parentesco'),
+                    'ref_laboral_celular' => $request->input('ref_laboral_celular'),
+                    'ref_laboral_detalle' => $request->input('ref_laboral_detalle'),
+                    'pretension_salarial' => $validated['pretension_salarial'] ?? null,
+                    'porque_cargo' => $validated['porque_cargo'] ?? null,
+                ]
+            );
+
+            \Log::info('POSTULAR: Postulante DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+
+            // 3. Create ONE Postulacion per each oferta (DB only)
+            $postulacionIds = [];
+            $ofertasData = $request->input('ofertas_detalle', []);
+
+            foreach ($validated['oferta_ids'] as $ofertaId) {
+                $existe = Postulacion::where('postulante_id', $postulante->id)
+                    ->where('oferta_id', $ofertaId)
+                    ->whereIn('estado', ['enviada', 'en_revision', 'validada'])
+                    ->exists();
+
+                if ($existe) {
+                    $cargo = Oferta::find($ofertaId)->cargo->nombre;
+                    throw new \Exception("Usted ya tiene una postulación registrada y vigente para el cargo de: {$cargo}.");
+                }
+
+                $detalleRaw = collect($ofertasData)->firstWhere('oferta_id', $ofertaId);
+                $detalle = is_array($detalleRaw) ? $detalleRaw : [];
+
+                $postulacion = Postulacion::create([
+                    'postulante_id' => $postulante->id,
+                    'oferta_id' => $ofertaId,
+                    'pretension_salarial' => $detalle['pretension_salarial'] ?? $validated['pretension_salarial'],
+                    'porque_cargo' => $detalle['porque_cargo'] ?? $validated['porque_cargo'],
+                    'estado' => 'enviada',
+                    'fecha_postulacion' => now(),
+                ]);
+                $postulacionIds[] = $postulacion->id;
+            }
+
+            \Log::info('POSTULAR: Postulaciones DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+
+            // 4. Process Meritos (DB only)
+            $meritosCreated = [];
+            $meritos = $validated['meritos'] ?? [];
+            foreach ($meritos as $index => $meritoData) {
+                $merito = PostulanteMerito::create([
+                    'postulante_id' => $postulante->id,
+                    'tipo_documento_id' => $meritoData['tipo_documento_id'],
+                    'respuestas' => $meritoData['respuestas'] ?? [],
+                    'estado_verificacion' => 'pendiente',
+                ]);
+                $meritosCreated[] = ['id' => $merito->id, 'index' => $index];
+            }
+
+            \Log::info('POSTULAR: Meritos DB OK', ['elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms']);
+
+            return [
+                'postulante' => $postulante,
+                'postulacionIds' => $postulacionIds,
+                'meritosCreated' => $meritosCreated
+            ];
         });
 
         // ---------------------------------------------------------
         // FUERA DE LA TRANSACCIÓN: Procesamiento de Archivos Pesados
         // ---------------------------------------------------------
         try {
-            $dbData = $result;
             $postulante = $dbData['postulante'];
 
             // 1. Handle personal files
@@ -329,7 +353,7 @@ class PortalController extends Controller
         } catch (\Throwable $te) {
             \Log::error("Error crítico en postulación (Archivos/Sync): " . $te->getMessage());
             return response()->json([
-                'success' => true, // La DB ya se guardó, así que le decimos que OK pero con aviso interno
+                'success' => true,
                 'message' => 'Postulación registrada, pero hubo un inconveniente al procesar algunos archivos.',
                 'data' => [
                     'postulante_id' => $dbData['postulante']->id,
@@ -337,7 +361,6 @@ class PortalController extends Controller
                 ]
             ], 201);
         }
-    }
     }
 
     /**
