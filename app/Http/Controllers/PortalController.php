@@ -13,6 +13,7 @@ use App\Models\Sede;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class PortalController extends Controller
 {
@@ -157,11 +158,18 @@ class PortalController extends Controller
                 'ofertas_detalle.*.pretension_salarial' => 'required|numeric|min:0',
                 'ofertas_detalle.*.porque_cargo' => 'required|string|max:1000',
                 'has_archivos' => 'nullable|boolean',
+                'archivo_tokens' => 'nullable|array',
+                'archivo_tokens.foto_perfil' => 'nullable|string',
+                'archivo_tokens.ci_archivo' => 'nullable|string',
+                'archivo_tokens.cv_pdf' => 'nullable|string',
+                'archivo_tokens.carta_postulacion' => 'nullable|string',
 
                 // Dynamic merits
                 'meritos' => 'nullable|array',
                 'meritos.*.tipo_documento_id' => 'required|exists:tipos_documento,id',
                 'meritos.*.respuestas' => 'nullable|array',
+                'meritos.*.archivo_tokens' => 'nullable|array',
+                'meritos.*.archivo_tokens.*' => 'nullable|string',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -235,7 +243,7 @@ class PortalController extends Controller
                     'oferta_id' => $ofertaId,
                     'pretension_salarial' => $detalle['pretension_salarial'] ?? $validated['pretension_salarial'],
                     'porque_cargo' => $detalle['porque_cargo'] ?? $validated['porque_cargo'],
-                    'estado' => $request->boolean('has_archivos') ? 'pendiente_archivos' : 'enviada',
+                    'estado' => 'pendiente_archivos',
                     'fecha_postulacion' => now(),
                 ]);
                 $postulacionIds[] = $postulacion->id;
@@ -264,6 +272,8 @@ class PortalController extends Controller
                 'meritosCreated' => $meritosCreated
             ];
         });
+
+        $this->materializarArchivosTemporales($request, $dbData);
 
         // ---------------------------------------------------------
         // Responder INMEDIATAMENTE al usuario (la DB ya está guardada)
@@ -383,6 +393,128 @@ class PortalController extends Controller
             'success' => true,
             'message' => 'Archivos de postulacion cargados correctamente.',
         ]);
+    }
+
+    public function subirArchivoTemporal(Request $request)
+    {
+        $validated = $request->validate([
+            'scope' => 'required|string|in:personal,merito',
+            'field' => 'required|string|max:80',
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        $start = microtime(true);
+        $file = $request->file('file');
+        $path = $file->store('postulaciones/tmp', 'public');
+
+        $token = Crypt::encryptString(json_encode([
+            'path' => $path,
+            'scope' => $validated['scope'],
+            'field' => $validated['field'],
+            'name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+            'mime' => $file->getMimeType(),
+            'exp' => now()->addHours(2)->timestamp,
+        ]));
+
+        \Log::info('POSTULAR TEMP FILE OK', [
+            'scope' => $validated['scope'],
+            'field' => $validated['field'],
+            'size' => $file->getSize(),
+            'elapsed' => round((microtime(true) - $start) * 1000) . 'ms',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'token' => $token,
+            'file' => [
+                'name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+            ],
+        ]);
+    }
+
+    private function materializarArchivosTemporales(Request $request, array $dbData): void
+    {
+        $postulante = $dbData['postulante'];
+        $start = microtime(true);
+
+        DB::transaction(function () use ($request, $postulante, $dbData) {
+            $personalTokens = $request->input('archivo_tokens', []);
+            $personalTargets = [
+                'foto_perfil' => ['column' => 'foto_perfil_path', 'dir' => 'postulantes/fotos'],
+                'ci_archivo' => ['column' => 'ci_archivo_path', 'dir' => 'postulantes/ci'],
+                'cv_pdf' => ['column' => 'cv_pdf_path', 'dir' => 'postulantes/cv'],
+                'carta_postulacion' => ['column' => 'carta_postulacion_path', 'dir' => 'postulantes/cartas'],
+            ];
+
+            foreach ($personalTargets as $field => $target) {
+                if (empty($personalTokens[$field])) {
+                    continue;
+                }
+
+                $postulante->{$target['column']} = $this->moverArchivoTemporal($personalTokens[$field], $target['dir']);
+            }
+            $postulante->save();
+
+            $meritosInput = $request->input('meritos', []);
+            foreach ($dbData['meritosCreated'] as $mInfo) {
+                $index = $mInfo['index'];
+                $tokens = $meritosInput[$index]['archivo_tokens'] ?? [];
+
+                foreach ($tokens as $configId => $token) {
+                    if (!$token) {
+                        continue;
+                    }
+
+                    $path = $this->moverArchivoTemporal($token, "postulantes/meritos/{$postulante->id}");
+                    MeritoArchivo::updateOrCreate(
+                        [
+                            'merito_id' => $mInfo['id'],
+                            'config_archivo_id' => $configId,
+                        ],
+                        ['archivo_path' => $path]
+                    );
+                }
+            }
+
+            Postulacion::whereIn('id', $dbData['postulacionIds'])
+                ->where('postulante_id', $postulante->id)
+                ->where('estado', 'pendiente_archivos')
+                ->update(['estado' => 'enviada']);
+        });
+
+        \Log::info('POSTULAR: Archivos temporales materializados', [
+            'postulante_id' => $postulante->id,
+            'elapsed' => round((microtime(true) - $start) * 1000) . 'ms',
+        ]);
+    }
+
+    private function moverArchivoTemporal(string $token, string $targetDir): string
+    {
+        try {
+            $payload = json_decode(Crypt::decryptString($token), true);
+        } catch (\Throwable $e) {
+            throw new \Exception('Token de archivo invalido.');
+        }
+
+        if (!is_array($payload) || (int) ($payload['exp'] ?? 0) < now()->timestamp) {
+            throw new \Exception('Token de archivo vencido.');
+        }
+
+        $source = $payload['path'] ?? '';
+        if (!$source || !Storage::disk('public')->exists($source)) {
+            throw new \Exception('Archivo temporal no encontrado.');
+        }
+
+        $extension = pathinfo($source, PATHINFO_EXTENSION);
+        $filename = uniqid('', true) . ($extension ? ".{$extension}" : '');
+        $target = trim($targetDir, '/') . '/' . $filename;
+
+        Storage::disk('public')->makeDirectory($targetDir);
+        Storage::disk('public')->move($source, $target);
+
+        return $target;
     }
 
     /**
