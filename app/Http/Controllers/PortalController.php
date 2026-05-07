@@ -417,21 +417,24 @@ class PortalController extends Controller
             'exp' => now()->addHours(2)->timestamp,
         ]));
 
+        $elapsedMs = (int) round((microtime(true) - $start) * 1000);
+
         \Log::info('POSTULAR TEMP FILE OK', [
             'scope' => $validated['scope'],
             'field' => $validated['field'],
             'size' => $file->getSize(),
-            'elapsed' => round((microtime(true) - $start) * 1000) . 'ms',
+            'elapsed' => $elapsedMs . 'ms',
         ]);
 
         return response()->json([
             'success' => true,
             'token' => $token,
+            'server_elapsed_ms' => $elapsedMs,
             'file' => [
                 'name' => $file->getClientOriginalName(),
                 'size' => $file->getSize(),
             ],
-        ]);
+        ])->header('X-SISPO-Store-Time-Ms', (string) $elapsedMs);
     }
 
     private function materializarArchivosTemporales(Request $request, array $dbData): void
