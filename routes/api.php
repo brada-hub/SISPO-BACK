@@ -47,6 +47,10 @@ Route::get('/convocatorias/{id}', [App\Http\Controllers\ConvocatoriaController::
 Route::post('/postulaciones', [PostulacionController::class, 'store']);
 Route::post('/postular', [PostulacionController::class, 'store']);
 
+Route::get('/merit-schemas', function () {
+    return response()->json(\App\Support\MeritSchemaRegistry::all());
+});
+
 // Auth Routes
 Route::post('/login', [App\Http\Controllers\Api\AuthController::class, 'login']);
 Route::get('/auth/google/redirect', [App\Http\Controllers\Api\AuthController::class, 'redirectToGoogle']);
@@ -62,7 +66,6 @@ Route::middleware('shared.sanctum')->group(function () {
     Route::get('dashboard/stats', [\App\Http\Controllers\DashboardController::class, 'getStats']);
     Route::apiResource('sedes', \App\Http\Controllers\SedeController::class);
     Route::apiResource('cargos', \App\Http\Controllers\CargoController::class);
-    Route::apiResource('tipos-documento', \App\Http\Controllers\TipoDocumentoController::class);
     Route::apiResource('convocatorias', \App\Http\Controllers\ConvocatoriaController::class);
     Route::apiResource('plantillas-matrices', \App\Http\Controllers\PlantillaMatrizController::class);
 
@@ -71,6 +74,7 @@ Route::middleware('shared.sanctum')->group(function () {
 
     // Custom Postulaciones routes
     Route::put('postulaciones/{id}/estado', [PostulacionController::class, 'updateStatus']);
+    Route::post('admin/postulaciones/{id}/update-status', [PostulacionController::class, 'updateEvaluationStatus']);
     Route::get('postulaciones/{id}/expediente', [PostulacionController::class, 'expediente']);
     Route::get('postulaciones/export/{convocatoriaId?}', [PostulacionController::class, 'export']);
     Route::apiResource('postulaciones', \App\Http\Controllers\PostulacionController::class);
@@ -100,15 +104,45 @@ Route::middleware('shared.sanctum')->group(function () {
     // Ruta de importación
     Route::post('importar-excel', [\App\Http\Controllers\ImportController::class, 'importExcel']);
 
-    // =====================
-    // MI LEGAJO (ADMINISTRATIVOS)
-    // =====================
-    Route::get('mi-legajo', [\App\Http\Controllers\MiLegajoController::class, 'show']);
-    Route::post('mi-legajo', [\App\Http\Controllers\MiLegajoController::class, 'update']);
+
 
     // =====================
     // GESTIÓN DE EXPEDIENTES (RRHH)
     // =====================
     Route::get('expedientes', [\App\Http\Controllers\ExpedienteController::class, 'index']);
     Route::get('expedientes/{id}', [\App\Http\Controllers\ExpedienteController::class, 'show']);
+
+
+    // =====================
+    // MÓDULO IA — Análisis Inteligente de Postulantes (Legacy Alias)
+    // =====================
+    Route::prefix('ai')->group(function () {
+        Route::post('analyze/{postulacionId}', [\App\Http\Controllers\AiController::class, 'analyzeCV']);
+        Route::get('analysis/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getAnalysis']);
+        Route::get('matching/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getMatching']);
+        Route::get('ranking/{convocatoriaId}', [\App\Http\Controllers\AiController::class, 'getRanking']);
+        Route::post('reanalyze/{postulacionId}', [\App\Http\Controllers\AiController::class, 'reanalyze']);
+        Route::post('batch-analyze/{convocatoriaId}', [\App\Http\Controllers\AiController::class, 'batchAnalyze']);
+        Route::get('audit-log/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getAuditLog']);
+        Route::post('override/{matchingId}', [\App\Http\Controllers\AiController::class, 'humanOverride']);
+        Route::get('config', [\App\Http\Controllers\AiController::class, 'getConfig']);
+        Route::get('job-status/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getJobStatus']);
+        Route::get('job-logs/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getJobLogs']);
+    });
+
+    // =====================
+    // MÓDULO SISPO SCORE ENGINE (Evaluación Determinística)
+    // =====================
+    Route::prefix('evaluations')->group(function () {
+        Route::post('run/{postulacionId}', [\App\Http\Controllers\AiController::class, 'analyzeCV']);
+        Route::get('analysis/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getAnalysis']);
+        Route::get('matching/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getMatching']);
+        Route::get('ranking/{convocatoriaId}', [\App\Http\Controllers\AiController::class, 'getRanking']);
+        Route::post('recalculate/{postulacionId}', [\App\Http\Controllers\AiController::class, 'reanalyze']);
+        Route::post('batch-run/{convocatoriaId}', [\App\Http\Controllers\AiController::class, 'batchAnalyze']);
+        Route::get('audit-log/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getAuditLog']);
+        Route::post('override/{matchingId}', [\App\Http\Controllers\AiController::class, 'humanOverride']);
+        Route::get('job-status/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getJobStatus']);
+        Route::get('job-logs/{postulacionId}', [\App\Http\Controllers\AiController::class, 'getJobLogs']);
+    });
 });

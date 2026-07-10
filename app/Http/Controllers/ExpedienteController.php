@@ -160,16 +160,34 @@ class ExpedienteController extends Controller
         $type = substr($id, 0, 1);
         $realId = substr($id, 1);
 
+        $normalizedRelations = [
+            'postulante.formacionesAcademicas',
+            'postulante.formacionesPostgrado',
+            'postulante.experienciasDocencia',
+            'postulante.experienciasProfesionales',
+            'postulante.capacitaciones',
+            'postulante.produccionesIntelectuales',
+            'postulante.reconocimientos',
+            'postulante.experienceSummary',
+            'postulante.trainingSummary',
+            'postulante.sede'
+        ];
+
         if ($type === 'u') {
             // Staff member
-            $user = User::with(['postulante.meritos.tipoDocumento', 'postulante.meritos.archivos', 'rol', 'sede'])->findOrFail($realId);
+            $user = User::with(array_merge($normalizedRelations, ['rol', 'sede']))->findOrFail($realId);
+            $data = $user->toArray();
+            if ($user->postulante) {
+                $data['postulante'] = (new \App\Http\Resources\ExpedienteNormalizedResource($user->postulante))->toArray(request());
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => $user
+                'data' => $data
             ]);
         } else {
             // Personnel from Portal or External applicant
-            $postulante = Postulante::with(['meritos.tipoDocumento', 'meritos.archivos', 'sede'])->findOrFail($realId);
+            $postulante = Postulante::with(str_replace('postulante.', '', $normalizedRelations))->findOrFail($realId);
 
             // Map to a common structure similar to User for the frontend
             $data = [
@@ -179,7 +197,7 @@ class ExpedienteController extends Controller
                 'email' => $postulante->email,
                 'rol' => ['nombre' => $postulante->clasificacion ?: 'POSTULANTE (EXT.)'],
                 'sede' => $postulante->sede,
-                'postulante' => $postulante
+                'postulante' => (new \App\Http\Resources\ExpedienteNormalizedResource($postulante))->toArray(request())
             ];
 
             return response()->json([

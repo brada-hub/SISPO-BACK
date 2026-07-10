@@ -105,13 +105,14 @@ class PortalController extends Controller
             return response()->json([]);
         }
 
-        $requisitos = TipoDocumento::whereIn('id', $requisitosIds)
-            ->orderBy('orden')
-            ->get()
+        $schemas = collect(\App\Support\MeritSchemaRegistry::all());
+        $requisitos = $schemas->whereIn('id', $requisitosIds)
             ->map(function($req) use ($opcionales) {
-                $req->opcional = in_array($req->id, $opcionales);
+                // Ensure array format is converted to object or formatted properly
+                $req['opcional'] = in_array($req['id'], $opcionales);
                 return $req;
-            });
+            })
+            ->values();
 
         return response()->json($requisitos);
     }
@@ -588,10 +589,22 @@ class PortalController extends Controller
         // If email is provided, check if it matches to grant "edit access" without login
         if ($request->filled('email')) {
             if (strtolower(trim($postulante->email)) === strtolower(trim($request->email))) {
+                $postulante->load([
+                    'formacionesAcademicas',
+                    'formacionesPostgrado',
+                    'experienciasDocencia',
+                    'experienciasProfesionales',
+                    'capacitaciones',
+                    'produccionesIntelectuales',
+                    'reconocimientos',
+                    'sede'
+                ]);
+                $formatted = (new \App\Http\Resources\ExpedienteNormalizedResource($postulante))->toArray(request());
+
                 return response()->json([
                     'exists' => true,
                     'verified' => true,
-                    'data' => $postulante,
+                    'data' => $formatted,
                     'message' => 'Identidad verificada. Cargando sus datos actuales...'
                 ]);
             } else {
@@ -615,7 +628,7 @@ class PortalController extends Controller
      */
     public function tiposDocumentoGenerales()
     {
-        return response()->json(TipoDocumento::orderBy('orden')->get());
+        return response()->json(\App\Support\MeritSchemaRegistry::all());
     }
 
     /**
@@ -668,7 +681,6 @@ class PortalController extends Controller
                     ]
                 );
 
-
                 // 2. Handle Files
                 if ($request->hasFile('foto_perfil')) {
                     $postulante->foto_perfil_path = $request->file('foto_perfil')->store('postulantes/fotos', 'public');
@@ -681,49 +693,179 @@ class PortalController extends Controller
                 }
                 $postulante->save();
 
-                // 3. Process Meritos
+                // 3. Process Meritos (NATIVE NORMALIZED - FASE 4)
                 $meritosData = $request->input('meritos', []);
                 foreach ($meritosData as $index => $mData) {
-                    // Si viene con ID lo usamos, sino buscamos por duplicados de tipo si no permite multiples
-                    $item = PostulanteMerito::updateOrCreate(
-                        [
-                            'id' => $mData['id'] ?? null,
-                            'postulante_id' => $postulante->id,
-                            'tipo_documento_id' => $mData['tipo_documento_id'],
-                        ],
-                        [
-                            'respuestas' => is_string($mData['respuestas']) ? json_decode($mData['respuestas'], true) : ($mData['respuestas'] ?? []),
-                        ]
-                    );
+                    $tipoId = (int)$mData['tipo_documento_id'];
+                    $respuestas = is_string($mData['respuestas']) ? json_decode($mData['respuestas'], true) : ($mData['respuestas'] ?? []);
 
-                    // Handle files for this merit
+                    $cleanId = null;
+                    if (!empty($mData['id'])) {
+                        $cleanId = (int) preg_replace('/[^0-9]/', '', $mData['id']);
+                    }
+
+                    $modelClass = match ($tipoId) {
+                        1 => \App\Models\FormacionAcademica::class,
+                        2 => \App\Models\FormacionPostgrado::class,
+                        3 => \App\Models\ExperienciaDocencia::class,
+                        4 => \App\Models\ExperienciaProfesional::class,
+                        5 => \App\Models\Capacitacion::class,
+                        6 => \App\Models\ProduccionIntelectual::class,
+                        7 => \App\Models\Reconocimiento::class,
+                        default => null,
+                    };
+
+                    if (!$modelClass) {
+                        continue;
+                    }
+
+                    $row = null;
+                    if ($cleanId) {
+                        $row = $modelClass::where('id', $cleanId)->where('postulante_id', $postulante->id)->first();
+                    }
+                    if (!$row) {
+                        $row = new $modelClass();
+                        $row->postulante_id = $postulante->id;
+                    }
+
+                    if ($tipoId === 1) {
+                        $row->nivel_academico_raw = $respuestas['nivel'] ?? null;
+                        $row->universidad = $respuestas['universidad'] ?? null;
+                        $row->carrera_raw = $respuestas['profesion'] ?? ($respuestas['carrera'] ?? null);
+                        $row->fecha_diploma = $respuestas['fecha_diploma'] ?? null;
+                        $row->fecha_titulo = $respuestas['fecha_titulo'] ?? null;
+                    } elseif ($tipoId === 2) {
+                        $row->tipo_posgrado_raw = $respuestas['tipo_posgrado'] ?? null;
+                        $row->nombre_programa = $respuestas['nombre_programa'] ?? null;
+                        $row->fecha_certificacion = $respuestas['fecha_certificacion'] ?? ($respuestas['fecha'] ?? null);
+                        $row->institucion = $respuestas['institucion'] ?? null;
+                    } elseif ($tipoId === 3) {
+                        $row->universidad = $respuestas['universidad'] ?? null;
+                        $row->carrera_raw = $respuestas['carrera'] ?? null;
+                        $row->asignaturas = $respuestas['asignaturas'] ?? null;
+                        $row->gestion_periodo = $respuestas['gestion_periodo'] ?? null;
+                    } elseif ($tipoId === 4) {
+                        $row->cargo_raw = $respuestas['cargo'] ?? null;
+                        $row->empresa = $respuestas['empresa'] ?? null;
+                        $row->fecha_inicio = $respuestas['fecha_inicio'] ?? null;
+                        $row->fecha_fin = $respuestas['fecha_fin'] ?? null;
+                        
+                        $months = 0;
+                        if (!empty($respuestas['fecha_inicio']) && !empty($respuestas['fecha_fin'])) {
+                            try {
+                                $start = new \DateTime($respuestas['fecha_inicio']);
+                                $end = new \DateTime($respuestas['fecha_fin']);
+                                $diff = $start->diff($end);
+                                $months = ($diff->y * 12) + $diff->m;
+                            } catch (\Exception $ex) {}
+                        }
+                        $row->duracion_meses = $months;
+                    } elseif ($tipoId === 5) {
+                        $row->nombre_curso = $respuestas['nombre'] ?? null;
+                        $row->fecha = $respuestas['fecha'] ?? null;
+                        $row->institucion_organizadora = $respuestas['institucion'] ?? null;
+                        $row->carga_horaria = (int)($respuestas['horas'] ?? 0);
+                    } elseif ($tipoId === 6) {
+                        $row->tipo_produccion_raw = $respuestas['tipo'] ?? null;
+                        $row->titulo = $respuestas['titulo'] ?? null;
+                        $row->fecha_publicacion = $respuestas['fecha'] ?? null;
+                        $row->editorial_revista = $respuestas['editorial'] ?? null;
+                        $row->lugar = $respuestas['lugar'] ?? null;
+                    } elseif ($tipoId === 7) {
+                        $row->titulo_reconocimiento = $respuestas['titulo'] ?? null;
+                        $row->fecha = $respuestas['fecha'] ?? null;
+                        $row->institucion_otorgante = $respuestas['institucion'] ?? null;
+                        $row->lugar = $respuestas['lugar'] ?? null;
+                    }
+
+                    // Handle files
                     $files = $request->file("meritos.{$index}.archivos");
                     if ($files && is_array($files)) {
                         foreach ($files as $configKey => $file) {
                              if ($file instanceof \Illuminate\Http\UploadedFile) {
                                  $path = $file->store("postulantes/{$postulante->id}/meritos", 'public');
-                                 $item->archivos()->updateOrCreate(
-                                     ['config_archivo_id' => $configKey],
-                                     ['archivo_path' => $path]
-                                 );
+
+                                 if ($tipoId === 1) {
+                                     if ($configKey === 'diploma') {
+                                         $row->diploma_archivo_path = $path;
+                                         $row->diploma_archivo_original_name = $file->getClientOriginalName();
+                                         $row->diploma_archivo_mime = $file->getClientMimeType();
+                                     } elseif ($configKey === 'titulo') {
+                                         $row->titulo_archivo_path = $path;
+                                         $row->titulo_archivo_original_name = $file->getClientOriginalName();
+                                         $row->titulo_archivo_mime = $file->getClientMimeType();
+                                     }
+                                 } else {
+                                     $prefix = match ($tipoId) {
+                                         2 => 'certificado_archivo',
+                                         3 => 'respaldo_archivo',
+                                         4 => 'certificado_archivo',
+                                         5 => 'certificado_archivo',
+                                         6 => 'evidencia_archivo',
+                                         7 => 'reconocimiento_archivo',
+                                         default => null,
+                                     };
+                                     if ($prefix) {
+                                         $pathCol = "{$prefix}_path";
+                                         $nameCol = "{$prefix}_original_name";
+                                         $mimeCol = "{$prefix}_mime";
+                                         
+                                         $row->$pathCol = $path;
+                                         $row->$nameCol = $file->getClientOriginalName();
+                                         $row->$mimeCol = $file->getClientMimeType();
+                                     }
+                                 }
                              }
                         }
                     }
+
+                    $row->save();
                 }
 
                 // 4. Link user if it exists (staff registration)
                 if (!$postulante->user_id) {
-                    $user = \App\Models\User::where('ci', $postulante->ci)->first();
-                    if ($user) {
-                        $postulante->user_id = $user->id;
-                        $postulante->save();
+                    try {
+                        $user = null;
+                        if (Schema::connection('core')->hasTable('users')) {
+                            // Try Has Persona relation
+                            try {
+                                $user = \App\Models\User::whereHas('persona', function ($query) use ($postulante) {
+                                    $query->where('ci', $postulante->ci);
+                                })->first();
+                            } catch (\Throwable $eInner) {}
+
+                            // Fallback to direct 'ci' lookup if column exists
+                            if (!$user && Schema::connection('core')->hasColumn('users', 'ci')) {
+                                $user = \App\Models\User::where('ci', $postulante->ci)->first();
+                            }
+                        }
+
+                        if ($user) {
+                            $postulante->user_id = $user->id;
+                            $postulante->save();
+                        }
+                    } catch (\Throwable $e) {
+                        \Log::warning("No se pudo asociar usuario al postulante: " . $e->getMessage());
                     }
                 }
+
+                $postulante->load([
+                    'formacionesAcademicas',
+                    'formacionesPostgrado',
+                    'experienciasDocencia',
+                    'experienciasProfesionales',
+                    'capacitaciones',
+                    'produccionesIntelectuales',
+                    'reconocimientos',
+                    'sede'
+                ]);
+
+                $formatted = (new \App\Http\Resources\ExpedienteNormalizedResource($postulante))->toArray(request());
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Información registrada correctamente.',
-                    'postulante' => $postulante->fresh(['meritos.archivos', 'sede'])
+                    'postulante' => $formatted
                 ]);
             });
 

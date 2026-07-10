@@ -36,4 +36,19 @@ class Postulacion extends Model
     {
         return $this->hasOne(EvaluacionPostulacion::class, 'postulacion_id');
     }
+
+    public function aiCvAnalyses()
+    {
+        return $this->hasMany(AiCvAnalysis::class, 'postulacion_id');
+    }
+
+    public function aiMatchingResult()
+    {
+        return $this->hasOne(AiMatchingResult::class, 'postulacion_id')->latest();
+    }
+
+    public function evaluationResult()
+    {
+        return $this->hasOne(EvaluationResult::class, 'postulacion_id');
+    }
 }

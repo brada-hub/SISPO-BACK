@@ -41,4 +41,18 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Gemini AI (SISPO IA)
+    |--------------------------------------------------------------------------
+    */
+    'gemini' => [
+        'api_key'     => env('AI_API_KEY', ''),
+        'model'       => env('AI_MODEL', 'gemini-2.0-flash'),
+        'temperature' => (float) env('AI_TEMPERATURE', 0.3),
+        'max_tokens'  => (int) env('AI_MAX_TOKENS', 4096),
+        'enabled'     => (bool) env('AI_ENABLED', false),
+        'provider'    => env('AI_PROVIDER', 'gemini'),
+    ],
+
 ];

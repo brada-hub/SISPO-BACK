@@ -22,10 +22,15 @@ class PostulacionController extends Controller
         $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::with([
             'postulante.meritos.tipoDocumento',
+            'postulante.formacionesAcademicas.academicLevel',
+            'postulante.experienciasProfesionales',
+            'postulante.experienceSummary',
+            'postulante.trainingSummary',
             'oferta.cargo',
             'oferta.sede',
             'oferta.convocatoria',
-            'evaluacion'
+            'evaluacion',
+            'aiMatchingResult'
         ]);
 
         if ($this->shouldLimitByConvocatoria($user)) {
@@ -66,10 +71,15 @@ class PostulacionController extends Controller
         $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::with([
             'postulante.meritos.tipoDocumento',
+            'postulante.formacionesAcademicas.academicLevel',
+            'postulante.experienciasProfesionales',
+            'postulante.experienceSummary',
+            'postulante.trainingSummary',
             'oferta.cargo',
             'oferta.sede',
             'oferta.convocatoria',
-            'evaluacion'
+            'evaluacion',
+            'aiMatchingResult'
         ]);
 
         if ($this->shouldLimitByConvocatoria($user)) {
@@ -123,8 +133,16 @@ class PostulacionController extends Controller
         $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
         $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::with([
-            'postulante.meritos.tipoDocumento',
-            'postulante.meritos.archivos',
+            'postulante.formacionesAcademicas',
+            'postulante.formacionesPostgrado',
+            'postulante.experienciasDocencia',
+            'postulante.experienciasProfesionales',
+            'postulante.capacitaciones',
+            'postulante.produccionesIntelectuales',
+            'postulante.reconocimientos',
+            'postulante.experienceSummary',
+            'postulante.trainingSummary',
+            'postulante.sede',
             'oferta.cargo',
             'oferta.sede',
             'oferta.convocatoria'
@@ -141,7 +159,11 @@ class PostulacionController extends Controller
         }
 
         $postulacion = $query->findOrFail($id);
-        return response()->json($postulacion);
+        $data = $postulacion->toArray();
+        if ($postulacion->postulante) {
+            $data['postulante'] = (new \App\Http\Resources\ExpedienteNormalizedResource($postulacion->postulante))->toArray(request());
+        }
+        return response()->json($data);
     }
 
     public function export($convocatoriaId = null)
@@ -183,11 +205,25 @@ class PostulacionController extends Controller
             if (request('estado')) $query->where('estado', request('estado'));
             if (request('sede_nombre')) {
                 $sede = request('sede_nombre');
-                $query->whereHas('oferta.sede', function($q) use ($sede) { $q->where('nombre', $sede); });
+                $query->whereHas('oferta', function($q) use ($sede) {
+                    $q->whereExists(function ($sub) use ($sede) {
+                        $sub->select(\DB::raw(1))
+                            ->from('sedes')
+                            ->whereColumn('ofertas.sede_id', 'sedes.id')
+                            ->where('sedes.nombre', $sede);
+                    });
+                });
             }
             if (request('cargo_nombre')) {
                 $cargo = request('cargo_nombre');
-                $query->whereHas('oferta.cargo', function($q) use ($cargo) { $q->where('nombre', $cargo); });
+                $query->whereHas('oferta', function($q) use ($cargo) {
+                    $q->whereExists(function ($sub) use ($cargo) {
+                        $sub->select(\DB::raw(1))
+                            ->from('cargos')
+                            ->whereColumn('ofertas.cargo_id', 'cargos.id')
+                            ->where('cargos.nombre', $cargo);
+                    });
+                });
             }
             if (request('salario_min')) $query->where('pretension_salarial', '>=', request('salario_min'));
             if (request('salario_max')) $query->where('pretension_salarial', '<=', request('salario_max'));
@@ -269,10 +305,13 @@ class PostulacionController extends Controller
                     $area = '-';
                     $anio = '-';
 
-                    if ($formacion && isset($formacion->respuestas)) {
-                        $area = strtoupper($formacion->respuestas['profesion'] ?? '-');
-                        $fechaTit = $formacion->respuestas['fecha_titulo'] ?? '';
-                        $anio = $fechaTit ? substr($fechaTit, 0, 4) : '-';
+                    if ($formacion && !empty($formacion->respuestas)) {
+                        $respuestas = is_array($formacion->respuestas) ? $formacion->respuestas : json_decode($formacion->respuestas, true);
+                        if (is_array($respuestas)) {
+                            $area = strtoupper($respuestas['profesion'] ?? '-');
+                            $fechaTit = $respuestas['fecha_titulo'] ?? '';
+                            $anio = $fechaTit ? substr($fechaTit, 0, 4) : '-';
+                        }
                     }
 
                     $dataRow = [
@@ -290,15 +329,21 @@ class PostulacionController extends Controller
                     foreach ($meritFieldKeys as $config) {
                         $merito = $post->meritos->where('tipo_documento_id', $config['tipo_id'])->first();
                         $val = '-';
-                        if ($merito && isset($merito->respuestas)) {
-                            $val = $merito->respuestas[$config['key']] ?? '-';
-                            if (is_array($val)) $val = implode(', ', $val);
+                        if ($merito && !empty($merito->respuestas)) {
+                            $respuestas = is_array($merito->respuestas) ? $merito->respuestas : json_decode($merito->respuestas, true);
+                            if (is_array($respuestas)) {
+                                $val = $respuestas[$config['key']] ?? '-';
+                                if (is_array($val)) $val = implode(', ', $val);
+                            }
                         }
                         $dataRow[] = strtoupper((string)$val);
                     }
 
                     // Add Observations at the end
-                    $obs = ($p->evaluacion) ? $p->evaluacion->observaciones : '-';
+                    $obs = '-';
+                    if ($p->evaluacion) {
+                        $obs = $p->evaluacion->review_reason_summary ?: ($p->evaluacion->observaciones ?? '-');
+                    }
                     $dataRow[] = strtoupper((string)($obs ?: '-'));
 
                     $sheet->fromArray([$dataRow], null, 'A' . $currentRow);
@@ -414,6 +459,32 @@ class PostulacionController extends Controller
         $postulacion->delete();
 
         return response()->json(['success' => true, 'message' => 'Postulación eliminada correctamente']);
+    }
+
+    public function updateEvaluationStatus(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'evaluation_status' => 'required|in:manually_approved,manually_rejected,requires_human_review',
+            'manual_comment' => 'nullable|string'
+        ]);
+
+        $postulacion = Postulacion::findOrFail($id);
+        $evalResult = $postulacion->evaluacion;
+
+        if ($evalResult) {
+            $evalResult->evaluation_status = $validated['evaluation_status'];
+            if (!empty($validated['manual_comment'])) {
+                $evalResult->review_reason_summary = $validated['manual_comment'];
+            }
+            $evalResult->requires_human_review = ($validated['evaluation_status'] === 'requires_human_review');
+            $evalResult->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Decisión de auditoría registrada correctamente',
+            'evaluation_status' => $evalResult ? $evalResult->evaluation_status : null
+        ]);
     }
 
     private function shouldLimitByConvocatoria($user): bool

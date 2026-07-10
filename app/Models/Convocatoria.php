@@ -20,6 +20,9 @@ class Convocatoria extends Model
         'requisitos_opcionales',
         'requisitos_afiche',
         'matriz_evaluacion',
+        'score_profile_id',
+        'estado',
+        'draft_versions',
     ];
 
     protected $casts = [
@@ -29,6 +32,8 @@ class Convocatoria extends Model
         'matriz_evaluacion' => 'array',
         'fecha_inicio' => 'date',
         'fecha_cierre' => 'date',
+        'score_profile_id' => 'integer',
+        'draft_versions' => 'array',
     ];
 
     protected $appends = ['gestion'];
@@ -36,6 +41,16 @@ class Convocatoria extends Model
     public function getGestionAttribute()
     {
         return $this->fecha_inicio ? $this->fecha_inicio->format('Y') : null;
+    }
+
+    public function scoreProfile()
+    {
+        return $this->belongsTo(ScoreProfile::class, 'score_profile_id');
+    }
+
+    public function scoreRules()
+    {
+        return $this->hasMany(ConvocatoriaScoreRule::class, 'convocatoria_id');
     }
 
     public function ofertas()

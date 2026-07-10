@@ -62,9 +62,18 @@ class ConvocatoriaController extends Controller
             'ofertas' => 'required|array|min:1',
             'ofertas.*.sede_id' => 'required|exists:sedes,id',
             'ofertas.*.cargo_id' => 'required|exists:cargos,id',
+            'estado' => 'nullable|string|in:draft,reviewing,published,archived,closed',
+            'score_profile_id' => 'nullable|integer',
         ]);
 
-        return DB::transaction(function () use ($validated) {
+        $estado = $validated['estado'] ?? 'draft';
+
+        // Strict business validation if publishing immediately (FASE 4)
+        if ($estado === 'published') {
+            $this->performStrictBusinessValidation($validated);
+        }
+
+        return DB::transaction(function () use ($validated, $estado) {
             $convocatoria = Convocatoria::create([
                 'titulo' => $validated['titulo'],
                 'codigo_interno' => $validated['codigo_interno'],
@@ -77,6 +86,9 @@ class ConvocatoriaController extends Controller
                 'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
                 'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
                 'matriz_evaluacion' => $validated['matriz_evaluacion'] ?? null,
+                'estado' => $estado,
+                'score_profile_id' => $validated['score_profile_id'] ?? null,
+                'draft_versions' => [],
             ]);
 
             foreach ($validated['ofertas'] as $o) {
@@ -87,6 +99,12 @@ class ConvocatoriaController extends Controller
                     'vacantes' => $o['vacantes'] ?? 1,
                 ]);
             }
+
+            // Log Audit (FASE 3)
+            $this->logAudit($convocatoria->id, 'create', [
+                'titulo' => $convocatoria->titulo,
+                'estado' => $convocatoria->estado
+            ]);
 
             return $convocatoria->load(['ofertas.sede', 'ofertas.cargo']);
         });
@@ -135,9 +153,56 @@ class ConvocatoriaController extends Controller
                 'ofertas' => 'required|array|min:1',
                 'ofertas.*.sede_id' => 'required|exists:sedes,id',
                 'ofertas.*.cargo_id' => 'required|exists:cargos,id',
+                'estado' => 'nullable|string|in:draft,reviewing,published,archived,closed',
+                'score_profile_id' => 'nullable|integer',
+                'restore_version_index' => 'nullable|integer',
             ]);
 
-            return DB::transaction(function () use ($validated, $convocatoria) {
+            $estado = $validated['estado'] ?? $convocatoria->estado ?? 'draft';
+
+            // Strict business validation if publishing (FASE 4)
+            if ($estado === 'published') {
+                $this->performStrictBusinessValidation($validated);
+            }
+
+            return DB::transaction(function () use ($validated, $convocatoria, $estado, $request) {
+                // Draft Versioning Engine (FASE 2)
+                $versions = $convocatoria->draft_versions ?? [];
+                
+                // If restore requested
+                if (isset($validated['restore_version_index']) && isset($versions[$validated['restore_version_index']])) {
+                    $restoredState = $versions[$validated['restore_version_index']]['form_state'];
+                    $validated['titulo'] = $restoredState['titulo'] ?? $validated['titulo'];
+                    $validated['descripcion'] = $restoredState['descripcion'] ?? $validated['descripcion'];
+                    $validated['config_requisitos_ids'] = $restoredState['config_requisitos_ids'] ?? $validated['config_requisitos_ids'];
+                    $validated['matriz_evaluacion'] = $restoredState['matriz_evaluacion'] ?? $validated['matriz_evaluacion'];
+                    $this->logAudit($convocatoria->id, 'restore_version', ['index' => $validated['restore_version_index']]);
+                } else {
+                    // Auto-generate version if it is draft or reviewing
+                    if ($estado === 'draft' || $estado === 'reviewing') {
+                        if (count($versions) >= 10) {
+                            array_shift($versions);
+                        }
+                        $versions[] = [
+                            'timestamp' => now()->toIso8601String(),
+                            'user_id' => auth()->id(),
+                            'user_name' => auth()->user()?->name ?? 'Sistema',
+                            'form_state' => [
+                                'titulo' => $convocatoria->titulo,
+                                'descripcion' => $convocatoria->descripcion,
+                                'config_requisitos_ids' => $convocatoria->config_requisitos_ids,
+                                'matriz_evaluacion' => $convocatoria->matriz_evaluacion,
+                            ]
+                        ];
+                    }
+                }
+
+                $changesList = [];
+                if ($convocatoria->titulo !== $validated['titulo']) $changesList['titulo'] = $validated['titulo'];
+                if ($convocatoria->estado !== $estado) $changesList['estado'] = $estado;
+                if (json_encode($convocatoria->matriz_evaluacion) !== json_encode($validated['matriz_evaluacion'])) $changesList['matriz_evaluacion'] = 'Updated evaluation matrix';
+                if (json_encode($convocatoria->config_requisitos_ids) !== json_encode($validated['config_requisitos_ids'])) $changesList['config_requisitos_ids'] = 'Updated requirements';
+
                 $convocatoria->update([
                     'titulo' => $validated['titulo'],
                     'codigo_interno' => $validated['codigo_interno'],
@@ -150,6 +215,9 @@ class ConvocatoriaController extends Controller
                     'requisitos_opcionales' => $validated['requisitos_opcionales'] ?? [],
                     'requisitos_afiche' => $validated['requisitos_afiche'] ?? [],
                     'matriz_evaluacion' => $validated['matriz_evaluacion'] ?? null,
+                    'estado' => $estado,
+                    'score_profile_id' => $validated['score_profile_id'] ?? null,
+                    'draft_versions' => $versions,
                 ]);
 
                 // Sync Ofertas correctly to prevent CASCADE DELETE of postulaciones
@@ -162,11 +230,9 @@ class ConvocatoriaController extends Controller
                     });
 
                     if ($oferta) {
-                        // Update existing to avoid changing its ID
                         $oferta->update(['vacantes' => $o['vacantes'] ?? 1]);
                         $keptOfertaIds[] = $oferta->id;
                     } else {
-                        // Create new
                         $newOferta = Oferta::create([
                             'convocatoria_id' => $convocatoria->id,
                             'sede_id' => $o['sede_id'],
@@ -177,15 +243,19 @@ class ConvocatoriaController extends Controller
                     }
                 }
 
-                // Delete only ofertas that were explicitly removed from the configuration
                 $convocatoria->ofertas()->whereNotIn('id', $keptOfertaIds)->delete();
+
+                // Log Audit (FASE 3)
+                if (!empty($changesList)) {
+                    $this->logAudit($convocatoria->id, 'update', $changesList);
+                }
 
                 return $convocatoria->load(['ofertas.sede', 'ofertas.cargo']);
             });
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error de validación',
+                'message' => 'Error de validación de negocio',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Throwable $e) {
@@ -201,7 +271,14 @@ class ConvocatoriaController extends Controller
 
     public function destroy(Convocatoria $convocatoria)
     {
-        $convocatoria->delete();
+        $id = $convocatoria->id;
+        $titulo = $convocatoria->titulo;
+        
+        DB::transaction(function () use ($convocatoria, $id, $titulo) {
+            $convocatoria->delete();
+            $this->logAudit($id, 'delete', ['titulo' => $titulo]);
+        });
+        
         return response()->noContent();
     }
 
@@ -248,6 +325,59 @@ class ConvocatoriaController extends Controller
             }
             $q->with('sede');
         }])->orderBy('fecha_inicio', 'desc')->get();
+    }
+
+    private function performStrictBusinessValidation(array $validated)
+    {
+        // 1. Matriz == 100
+        $matriz = $validated['matriz_evaluacion'] ?? [];
+        $totalPts = 0;
+        foreach ($matriz as $sec) {
+            foreach ($sec['criterios'] ?? [] as $c) {
+                $totalPts += intval($c['puntaje'] ?? 0);
+            }
+        }
+        if ($totalPts !== 100) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'matriz_evaluacion' => ["La matriz de evaluación debe sumar exactamente 100 puntos (actual: $totalPts pts) para poder publicar."]
+            ]);
+        }
+
+        // 2. Fechas coherentes
+        $inicio = $validated['fecha_inicio'] ?? null;
+        $cierre = $validated['fecha_cierre'] ?? null;
+        if ($inicio && $cierre && strtotime($cierre) < strtotime($inicio)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'fecha_cierre' => ["La fecha de cierre no puede ser anterior a la fecha de inicio."]
+            ]);
+        }
+
+        // 3. Cargos/Sedes obligatorios
+        $ofertas = $validated['ofertas'] ?? [];
+        if (count($ofertas) === 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'ofertas' => ["Debe asociar al menos una sede y un cargo para publicar la convocatoria."]
+            ]);
+        }
+
+        // 4. Requisitos mínimos
+        $reqs = $validated['config_requisitos_ids'] ?? [];
+        if (count($reqs) === 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'config_requisitos_ids' => ["Debe seleccionar al menos un requisito mínimo para el perfil."]
+            ]);
+        }
+    }
+
+    private function logAudit($convocatoriaId, $action, $changes = null)
+    {
+        DB::table('convocatoria_audit_logs')->insert([
+            'convocatoria_id' => $convocatoriaId,
+            'user_id' => auth()->id(),
+            'action' => $action,
+            'changes' => is_array($changes) ? json_encode($changes) : $changes,
+            'created_at' => now(),
+        ]);
     }
 
     private function shouldLimitByConvocatoria($user): bool

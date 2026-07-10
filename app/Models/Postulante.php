@@ -52,4 +52,49 @@ class Postulante extends Model
     {
         return $this->hasMany(Postulacion::class);
     }
+
+    public function formacionesAcademicas()
+    {
+        return $this->hasMany(FormacionAcademica::class);
+    }
+
+    public function formacionesPostgrado()
+    {
+        return $this->hasMany(FormacionPostgrado::class);
+    }
+
+    public function experienciasDocencia()
+    {
+        return $this->hasMany(ExperienciaDocencia::class);
+    }
+
+    public function experienciasProfesionales()
+    {
+        return $this->hasMany(ExperienciaProfesional::class);
+    }
+
+    public function capacitaciones()
+    {
+        return $this->hasMany(Capacitacion::class);
+    }
+
+    public function produccionesIntelectuales()
+    {
+        return $this->hasMany(ProduccionIntelectual::class);
+    }
+
+    public function reconocimientos()
+    {
+        return $this->hasMany(Reconocimiento::class);
+    }
+
+    public function experienceSummary()
+    {
+        return $this->hasOne(PostulanteExperienceSummary::class);
+    }
+
+    public function trainingSummary()
+    {
+        return $this->hasOne(PostulanteTrainingSummary::class);
+    }
 }
