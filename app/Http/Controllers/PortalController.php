@@ -274,10 +274,26 @@ class PortalController extends Controller
             ];
         });
 
-        $this->materializarArchivosTemporales($request, $dbData);
+        // ---------------------------------------------------------
+        // Mover archivos temporales a destino final (protegido con try-catch)
+        // Si falla, la postulación YA ESTÁ guardada en la DB, NO se pierde.
+        // El postulante puede reintentar la subida de archivos luego.
+        // ---------------------------------------------------------
+        $archivosWarning = null;
+        try {
+            $this->materializarArchivosTemporales($request, $dbData);
+        } catch (\Throwable $e) {
+            $archivosWarning = 'Sus datos de postulación fueron guardados, pero hubo un problema al procesar algunos archivos adjuntos. Por favor, contacte al administrador si sus documentos no aparecen en el sistema.';
+            \Log::error('POSTULAR: Error al materializar archivos (postulacion guardada)', [
+                'postulante_id' => $dbData['postulante']->id,
+                'postulacion_ids' => $dbData['postulacionIds'],
+                'error' => $e->getMessage(),
+                'elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms',
+            ]);
+        }
 
         // ---------------------------------------------------------
-        // Responder INMEDIATAMENTE al usuario (la DB ya está guardada)
+        // Responder al usuario (la DB ya está guardada con o sin archivos)
         // ---------------------------------------------------------
         $postulante = $dbData['postulante'];
         $codigoBase = $postulante->ci;
@@ -288,12 +304,16 @@ class PortalController extends Controller
         ]));
 
         \Log::info('POSTULAR: DB completa, enviando respuesta inmediata', [
-            'elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms'
+            'elapsed' => round((microtime(true) - $startTotal) * 1000) . 'ms',
+            'archivos_ok' => $archivosWarning === null,
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Postulación registrada exitosamente.',
+            'message' => $archivosWarning
+                ? 'Postulación registrada, pero con advertencia en archivos.'
+                : 'Postulación registrada exitosamente.',
+            'archivos_warning' => $archivosWarning,
             'data' => [
                 'postulante_id' => $postulante->id,
                 'postulacion_ids' => $dbData['postulacionIds'],
@@ -302,6 +322,7 @@ class PortalController extends Controller
                 'meritos_upload' => $dbData['meritosCreated'],
             ]
         ], 201);
+
     }
 
     /**
@@ -415,7 +436,7 @@ class PortalController extends Controller
             'name' => $file->getClientOriginalName(),
             'size' => $file->getSize(),
             'mime' => $file->getMimeType(),
-            'exp' => now()->addHours(2)->timestamp,
+            'exp' => now()->addHours(6)->timestamp,
         ]));
 
         $elapsedMs = (int) round((microtime(true) - $start) * 1000);
@@ -442,54 +463,67 @@ class PortalController extends Controller
     {
         $postulante = $dbData['postulante'];
         $start = microtime(true);
+        $archivosMaterializados = []; // Track files moved, to clean up on partial failure
 
-        DB::transaction(function () use ($request, $postulante, $dbData) {
-            $personalTokens = $request->input('archivo_tokens', []);
-            $personalTargets = [
-                'foto_perfil' => ['column' => 'foto_perfil_path', 'dir' => 'postulantes/fotos'],
-                'ci_archivo' => ['column' => 'ci_archivo_path', 'dir' => 'postulantes/ci'],
-                'cv_pdf' => ['column' => 'cv_pdf_path', 'dir' => 'postulantes/cv'],
-                'carta_postulacion' => ['column' => 'carta_postulacion_path', 'dir' => 'postulantes/cartas'],
-            ];
+        try {
+            DB::transaction(function () use ($request, $postulante, $dbData, &$archivosMaterializados) {
+                $personalTokens = $request->input('archivo_tokens', []);
+                $personalTargets = [
+                    'foto_perfil'        => ['column' => 'foto_perfil_path',       'dir' => 'postulantes/fotos'],
+                    'ci_archivo'         => ['column' => 'ci_archivo_path',        'dir' => 'postulantes/ci'],
+                    'cv_pdf'             => ['column' => 'cv_pdf_path',            'dir' => 'postulantes/cv'],
+                    'carta_postulacion'  => ['column' => 'carta_postulacion_path', 'dir' => 'postulantes/cartas'],
+                ];
 
-            foreach ($personalTargets as $field => $target) {
-                if (empty($personalTokens[$field])) {
-                    continue;
+                foreach ($personalTargets as $field => $target) {
+                    if (empty($personalTokens[$field])) continue;
+
+                    $path = $this->moverArchivoTemporal($personalTokens[$field], $target['dir']);
+                    $archivosMaterializados[] = $path;
+                    $postulante->{$target['column']} = $path;
                 }
+                $postulante->save();
 
-                $postulante->{$target['column']} = $this->moverArchivoTemporal($personalTokens[$field], $target['dir']);
-            }
-            $postulante->save();
+                $meritosInput = $request->input('meritos', []);
+                foreach ($dbData['meritosCreated'] as $mInfo) {
+                    $index = $mInfo['index'];
+                    $tokens = $meritosInput[$index]['archivo_tokens'] ?? [];
 
-            $meritosInput = $request->input('meritos', []);
-            foreach ($dbData['meritosCreated'] as $mInfo) {
-                $index = $mInfo['index'];
-                $tokens = $meritosInput[$index]['archivo_tokens'] ?? [];
+                    foreach ($tokens as $configId => $token) {
+                        if (!$token) continue;
 
-                foreach ($tokens as $configId => $token) {
-                    if (!$token) {
-                        continue;
+                        $path = $this->moverArchivoTemporal($token, "postulantes/meritos/{$postulante->id}");
+                        $archivosMaterializados[] = $path;
+                        MeritoArchivo::updateOrCreate(
+                            ['merito_id' => $mInfo['id'], 'config_archivo_id' => $configId],
+                            ['archivo_path' => $path]
+                        );
                     }
+                }
 
-                    $path = $this->moverArchivoTemporal($token, "postulantes/meritos/{$postulante->id}");
-                    MeritoArchivo::updateOrCreate(
-                        [
-                            'merito_id' => $mInfo['id'],
-                            'config_archivo_id' => $configId,
-                        ],
-                        ['archivo_path' => $path]
-                    );
+                Postulacion::whereIn('id', $dbData['postulacionIds'])
+                    ->where('postulante_id', $postulante->id)
+                    ->where('estado', 'pendiente_archivos')
+                    ->update(['estado' => 'enviada']);
+            });
+        } catch (\Throwable $e) {
+            // Limpiar archivos que ya fueron movidos antes del fallo (evitar archivos huérfanos)
+            foreach ($archivosMaterializados as $path) {
+                try {
+                    Storage::disk('public')->delete($path);
+                } catch (\Throwable $cleanupEx) {
+                    \Log::warning('POSTULAR: No se pudo limpiar archivo tras fallo de materialización', [
+                        'path' => $path,
+                        'error' => $cleanupEx->getMessage(),
+                    ]);
                 }
             }
-
-            Postulacion::whereIn('id', $dbData['postulacionIds'])
-                ->where('postulante_id', $postulante->id)
-                ->where('estado', 'pendiente_archivos')
-                ->update(['estado' => 'enviada']);
-        });
+            throw $e; // Re-throw para que el caller (postular) lo atrape con su try-catch
+        }
 
         \Log::info('POSTULAR: Archivos temporales materializados', [
             'postulante_id' => $postulante->id,
+            'total_archivos' => count($archivosMaterializados),
             'elapsed' => round((microtime(true) - $start) * 1000) . 'ms',
         ]);
     }
