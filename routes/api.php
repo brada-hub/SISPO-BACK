@@ -51,6 +51,32 @@ Route::get('/merit-schemas', function () {
     return response()->json(\App\Support\MeritSchemaRegistry::all());
 });
 
+// Stream storage files with full CORS support for PDF merging and frontend previews
+Route::get('/files/stream', function (Request $request) {
+    $path = $request->query('path');
+    if (!$path) {
+        return response()->json(['error' => 'Path is required'], 400);
+    }
+
+    $cleanPath = ltrim(str_replace(['..', '\\'], ['', '/'], $path), '/');
+    if (str_starts_with($cleanPath, 'storage/')) {
+        $cleanPath = substr($cleanPath, 8);
+    }
+
+    $fullPath = storage_path('app/public/' . $cleanPath);
+    if (!file_exists($fullPath)) {
+        return response()->json(['error' => 'File not found: ' . $cleanPath], 404);
+    }
+
+    $mimeType = mime_content_type($fullPath) ?: 'application/octet-stream';
+    return response()->file($fullPath, [
+        'Content-Type' => $mimeType,
+        'Access-Control-Allow-Origin' => '*',
+        'Access-Control-Allow-Methods' => 'GET, OPTIONS',
+        'Access-Control-Allow-Headers' => '*'
+    ]);
+});
+
 // Auth Routes
 Route::post('/login', [App\Http\Controllers\Api\AuthController::class, 'login']);
 Route::get('/auth/google/redirect', [App\Http\Controllers\Api\AuthController::class, 'redirectToGoogle']);
