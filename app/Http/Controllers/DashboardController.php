@@ -39,17 +39,34 @@ class DashboardController extends Controller
 
         $totalPostulaciones = $qTotal->count();
         $convocatoriasActivas = $qActivas->count();
+        $totalConvocatorias = Convocatoria::count();
         $postulacionesHoy = $qHoy->count();
-        $pendientes = $qPendientes->count();
+        $postulacionesSemana = Postulacion::where('created_at', '>=', $hoy->copy()->subDays(7))->count();
+        $pendientes = (clone $qTotal)->whereIn('estado', ['enviada', 'pendiente_archivos'])->count();
+        $evaluadas = (clone $qTotal)->whereIn('estado', ['en_revision', 'evaluado', 'habilitado', 'seleccionado', 'rechazada'])->count();
+        $avanceEvaluacion = $totalPostulaciones > 0 ? round(($evaluadas / $totalPostulaciones) * 100, 1) : 0;
 
-        // 2. Por Sede (Distribución) - Solo sedes con convocatorias activas
-        // NOTA: Sede usa conexión 'core' (sso_db) pero ofertas/postulaciones están en sispo_db.
-        // Se usa DB::table para evitar el problema de cross-connection.
+        // Clasificaciones y Funnel de Selección
+        $aptosCount = (clone $qTotal)->where('estado', 'habilitado')->count();
+        if ($aptosCount === 0) {
+            $aptosCount = \App\Models\EvaluationResult::where('classification', 'apto')->count();
+        }
+        $enRevisionCount = (clone $qTotal)->where('estado', 'en_revision')->count();
+        $seleccionadosCount = (clone $qTotal)->where('estado', 'seleccionado')->count();
+        $rechazadasCount = (clone $qTotal)->where('estado', 'rechazada')->count();
+        $tasaHabilitacion = $evaluadas > 0 ? round(($aptosCount / $evaluadas) * 100, 1) : 0;
+
+        $funnel = [
+            ['key' => 'enviada', 'label' => 'Por Evaluar', 'count' => $pendientes, 'color' => '#6366F1', 'icon' => 'hourglass_empty'],
+            ['key' => 'en_revision', 'label' => 'En Evaluación', 'count' => $enRevisionCount, 'color' => '#8B5CF6', 'icon' => 'manage_search'],
+            ['key' => 'apto', 'label' => 'Aptos / Habilitados', 'count' => $aptosCount, 'color' => '#10B981', 'icon' => 'verified'],
+            ['key' => 'seleccionado', 'label' => 'Seleccionados', 'count' => $seleccionadosCount, 'color' => '#059669', 'icon' => 'military_tech'],
+            ['key' => 'rechazada', 'label' => 'No Habilitados', 'count' => $rechazadasCount, 'color' => '#EF4444', 'icon' => 'highlight_off'],
+        ];
+
+        // 2. Por Sede (Distribución)
         $sedeQuery = DB::table('postulaciones')
             ->join('ofertas', 'ofertas.id', '=', 'postulaciones.oferta_id')
-            ->join('convocatorias', 'convocatorias.id', '=', 'ofertas.convocatoria_id')
-            ->whereDate('convocatorias.fecha_inicio', '<=', $hoy)
-            ->whereDate('convocatorias.fecha_cierre', '>=', $hoy)
             ->select('ofertas.sede_id', DB::raw('count(*) as postulaciones_count'))
             ->groupBy('ofertas.sede_id');
 
@@ -68,11 +85,11 @@ class DashboardController extends Controller
             return [
                 'id' => $row->sede_id,
                 'nombre' => $sede?->nombre ?? 'Sede #' . $row->sede_id,
-                'postulaciones_count' => $row->postulaciones_count,
+                'postulaciones_count' => (int)$row->postulaciones_count,
             ];
-        });
+        })->sortByDesc('postulaciones_count')->values();
 
-        // 3. Cargos Postulados (Combinación Cargo - Sede) - Solo de convocatorias activas
+        // 3. Cargos Postulados (Top 8)
         $qOfertaStats = Oferta::query();
         if ($this->shouldLimitByConvocatoria($user)) {
             $qOfertaStats->whereIn('convocatoria_id', $allowedConvocatorias);
@@ -80,46 +97,81 @@ class DashboardController extends Controller
             $qOfertaStats->whereIn('sede_id', $allowedSedes);
         }
 
-        $topOfertas = $qOfertaStats->whereHas('convocatoria', function($q) use ($hoy) {
-            $q->whereDate('fecha_inicio', '<=', $hoy)
-              ->whereDate('fecha_cierre', '>=', $hoy);
-        })
-        ->withCount(['postulaciones as postulaciones_count' => function($q) use ($hoy) {
-             $q->whereHas('oferta.convocatoria', function($cq) use ($hoy) {
-                 $cq->whereDate('fecha_inicio', '<=', $hoy)
-                   ->whereDate('fecha_cierre', '>=', $hoy);
-             });
-        }])
-        ->with(['cargo:id,nombre', 'sede:id_sede,nombre'])
-        ->orderBy('postulaciones_count', 'desc')
-        ->take(10)
-        ->get();
+        $topOfertas = $qOfertaStats->withCount('postulaciones')
+            ->with(['cargo:id,nombre', 'sede:id_sede,nombre'])
+            ->orderBy('postulaciones_count', 'desc')
+            ->take(8)
+            ->get();
 
         $cargosPostulados = $topOfertas->map(function($oferta) {
             $cargoNombre = $oferta->cargo->nombre ?? 'Cargo #' . $oferta->cargo_id;
             $sedeNombre = $oferta->sede->nombre ?? 'Sede #' . $oferta->sede_id;
             return [
-                'nombre' => $cargoNombre . ' - ' . $sedeNombre,
-                'postulaciones_count' => $oferta->postulaciones_count
+                'nombre' => $cargoNombre . ' (' . $sedeNombre . ')',
+                'cargo' => $cargoNombre,
+                'sede' => $sedeNombre,
+                'postulaciones_count' => (int)$oferta->postulaciones_count
             ];
         });
 
-        // 4. Próximos Cierres (Próximos 7 días)
-        $qCierres = Convocatoria::query();
+        // 4. Convocatorias Operativas y Cierres Próximos
+        $qConvocatorias = Convocatoria::query();
         if ($this->shouldLimitByConvocatoria($user)) {
-            $qCierres->whereIn('id', $allowedConvocatorias);
+            $qConvocatorias->whereIn('id', $allowedConvocatorias);
         } elseif (!empty($allowedSedes)) {
-            $qCierres->whereHas('ofertas', fn($q) => $q->whereIn('sede_id', $allowedSedes));
+            $qConvocatorias->whereHas('ofertas', fn($q) => $q->whereIn('sede_id', $allowedSedes));
         }
 
-        $proximosCierres = $qCierres->whereDate('fecha_cierre', '>=', $hoy)
-            ->whereDate('fecha_cierre', '<=', $hoy->copy()->addDays(7))
-            ->orderBy('fecha_cierre', 'asc')
-            ->take(5)
-            ->get();
+        $convocatoriasGestion = (clone $qConvocatorias)
+            ->withCount(['postulaciones', 'postulaciones as evaluadas_count' => function($q) {
+                $q->whereIn('estado', ['en_revision', 'evaluado', 'habilitado', 'seleccionado', 'rechazada']);
+            }])
+            ->with(['ofertas.sede:id_sede,nombre', 'ofertas.cargo:id,nombre'])
+            ->orderBy('fecha_cierre', 'desc')
+            ->take(8)
+            ->get()
+            ->map(function($c) use ($hoy) {
+                $fechaCierre = $c->fecha_cierre ? Carbon::parse($c->fecha_cierre) : null;
+                $diasRestantes = $fechaCierre ? (int)$hoy->diffInDays($fechaCierre, false) : 0;
+                $total = (int)($c->postulaciones_count ?? 0);
+                $evaluadas = (int)($c->evaluadas_count ?? 0);
+                $avance = $total > 0 ? round(($evaluadas / $total) * 100) : 0;
+                $sedes = $c->ofertas->map(fn($o) => $o->sede->nombre ?? null)->filter()->unique()->values();
 
-        // 5. Actividad Reciente
-        $qReciente = Postulacion::query();
+                return [
+                    'id' => $c->id,
+                    'titulo' => $c->titulo,
+                    'codigo' => $c->codigo ?? 'CONV-' . $c->id,
+                    'fecha_inicio' => $c->fecha_inicio ? Carbon::parse($c->fecha_inicio)->format('d/m/Y') : '---',
+                    'fecha_cierre' => $fechaCierre ? $fechaCierre->format('d/m/Y') : '---',
+                    'dias_restantes' => $diasRestantes,
+                    'is_activa' => $diasRestantes >= 0,
+                    'is_urgente' => $diasRestantes >= 0 && $diasRestantes <= 5,
+                    'postulaciones_count' => $total,
+                    'evaluadas_count' => $evaluadas,
+                    'avance_pct' => $avance,
+                    'sedes' => $sedes
+                ];
+            });
+
+        // 5. Timeline de Postulaciones (Tendencia últimos 15 días activos)
+        $timelineRaw = DB::table('postulaciones')
+            ->select(DB::raw('DATE(created_at) as dia'), DB::raw('count(*) as total'))
+            ->groupBy('dia')
+            ->orderBy('dia', 'desc')
+            ->take(15)
+            ->get()
+            ->reverse()
+            ->values();
+
+        $timeline = $timelineRaw->map(function($t) {
+            return [
+                'fecha' => Carbon::parse($t->dia)->format('d M'),
+                'count' => (int)$t->total
+            ];
+        });
+
+        // 6. Actividad Reciente Detallada
         $query = Postulacion::with(['postulante', 'oferta.cargo', 'oferta.sede', 'oferta.convocatoria', 'evaluacion']);
         if ($this->shouldLimitByConvocatoria($user)) {
             $query->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
@@ -136,21 +188,36 @@ class DashboardController extends Controller
             'kpis' => [
                 'total' => $totalPostulaciones,
                 'activas' => $convocatoriasActivas,
+                'total_convocatorias' => $totalConvocatorias,
                 'hoy' => $postulacionesHoy,
-                'pendientes' => $pendientes
+                'semana' => $postulacionesSemana,
+                'pendientes' => $pendientes,
+                'evaluadas' => $evaluadas,
+                'avance_evaluacion' => $avanceEvaluacion,
+                'aptos' => $aptosCount,
+                'tasa_habilitacion' => $tasaHabilitacion,
             ],
+            'funnel' => $funnel,
+            'timeline' => $timeline,
             'chart_sede' => $porSede,
             'chart_cargos' => $cargosPostulados,
-            'cierres_criticos' => $proximosCierres,
+            'convocatorias_gestion' => $convocatoriasGestion,
+            'cierres_criticos' => $convocatoriasGestion->where('is_urgente', true)->values(),
             'recientes' => $actividadReciente->map(function($p) {
+                $post = $p->postulante;
+                $puntuacion = $p->evaluacion->puntuacion_total ?? null;
                 return [
                     'id' => $p->id,
-                    'postulante' => ($p->postulante) 
-                        ? ($p->postulante->nombres . ' ' . $p->postulante->apellidos) 
-                        : 'Postulante no identificado',
+                    'postulante' => $post ? ($post->nombres . ' ' . $post->apellidos) : 'Postulante no identificado',
+                    'ci' => $post ? ($post->ci . ' ' . ($post->ci_expedido ?? '')) : '',
+                    'foto' => $post?->foto_perfil_path ?? null,
                     'cargo' => $p->oferta->cargo->nombre ?? 'Cargo N/A',
                     'sede' => $p->oferta->sede->nombre ?? 'Sede N/A',
+                    'convocatoria' => $p->oferta->convocatoria->titulo ?? 'General',
+                    'estado' => $p->estado ?? 'enviada',
+                    'puntuacion' => $puntuacion !== null ? (float)$puntuacion : null,
                     'fecha' => $p->created_at ? $p->created_at->diffForHumans() : 'Fecha N/A',
+                    'fecha_exacta' => $p->created_at ? $p->created_at->format('d/m/Y H:i') : ''
                 ];
             })
         ]);
