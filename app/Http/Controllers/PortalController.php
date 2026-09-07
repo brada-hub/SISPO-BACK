@@ -685,6 +685,8 @@ class PortalController extends Controller
                 'clasificacion' => 'nullable|string|max:50',
                 'ref_personal_celular' => 'nullable|string|max:20',
                 'ref_personal_parentesco' => 'nullable|string|max:255',
+                'ref_laboral_celular' => 'nullable|string|max:20',
+                'ref_laboral_detalle' => 'nullable|string|max:500',
 
                 // Files
                 'foto_perfil' => 'nullable|image|max:2048',
@@ -712,6 +714,8 @@ class PortalController extends Controller
                         'clasificacion' => $validated['clasificacion'] ?? 'ADMINISTRATIVO',
                         'ref_personal_celular' => $validated['ref_personal_celular'] ?? null,
                         'ref_personal_parentesco' => $validated['ref_personal_parentesco'] ?? null,
+                        'ref_laboral_celular' => $validated['ref_laboral_celular'] ?? null,
+                        'ref_laboral_detalle' => $validated['ref_laboral_detalle'] ?? null,
                     ]
                 );
 
