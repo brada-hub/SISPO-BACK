@@ -29,13 +29,6 @@ class AiController extends Controller
     {
         $postulacion = Postulacion::with('postulante')->findOrFail($postulacionId);
 
-        if (! $postulacion->postulante?->cv_pdf_path) {
-            return response()->json([
-                'success' => false,
-                'message' => 'El postulante no tiene un CV PDF cargado.',
-            ], 422);
-        }
-
         try {
             $scoreRes = $this->runDeterministicEvaluation($postulacionId);
             return response()->json([

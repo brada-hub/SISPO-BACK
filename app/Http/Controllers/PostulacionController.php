@@ -30,7 +30,8 @@ class PostulacionController extends Controller
             'oferta.sede',
             'oferta.convocatoria',
             'evaluacion',
-            'aiMatchingResult'
+            'aiMatchingResult',
+            'evaluationResult'
         ]);
 
         if ($this->shouldLimitByConvocatoria($user)) {

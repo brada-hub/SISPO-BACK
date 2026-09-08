@@ -13,18 +13,23 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function getStats()
+    public function getStats(Request $request)
     {
         $hoy = Carbon::today();
         $user = auth()->user();
         $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
         $allowedSedes = $this->allowedSedeIds($user);
 
+        $filterSedeId = $request->query('sede_id');
+        $filterConvocatoriaId = $request->query('convocatoria_id');
+        $filterPeriodo = $request->query('periodo', 'all');
+
         $qTotal = Postulacion::query();
         $qActivas = Convocatoria::whereDate('fecha_inicio', '<=', $hoy)->whereDate('fecha_cierre', '>=', $hoy);
         $qHoy = Postulacion::whereDate('created_at', $hoy);
         $qPendientes = Postulacion::where('estado', 'enviada');
 
+        // Base user authorization scopes
         if ($this->shouldLimitByConvocatoria($user)) {
             $qTotal->whereHas('oferta', fn($q) => $q->whereIn('convocatoria_id', $allowedConvocatorias));
             $qActivas->whereIn('id', $allowedConvocatorias);
@@ -35,6 +40,24 @@ class DashboardController extends Controller
             $qActivas->whereHas('ofertas', fn($q) => $q->whereIn('sede_id', $allowedSedes));
             $qHoy->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
             $qPendientes->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
+        }
+
+        // Dynamic Interactive Filters from UI
+        if ($filterSedeId) {
+            $qTotal->whereHas('oferta', fn($q) => $q->where('sede_id', $filterSedeId));
+            $qActivas->whereHas('ofertas', fn($q) => $q->where('sede_id', $filterSedeId));
+            $qHoy->whereHas('oferta', fn($q) => $q->where('sede_id', $filterSedeId));
+            $qPendientes->whereHas('oferta', fn($q) => $q->where('sede_id', $filterSedeId));
+        }
+        if ($filterConvocatoriaId) {
+            $qTotal->whereHas('oferta', fn($q) => $q->where('convocatoria_id', $filterConvocatoriaId));
+            $qHoy->whereHas('oferta', fn($q) => $q->where('convocatoria_id', $filterConvocatoriaId));
+            $qPendientes->whereHas('oferta', fn($q) => $q->where('convocatoria_id', $filterConvocatoriaId));
+        }
+        if ($filterPeriodo === '7d') {
+            $qTotal->where('created_at', '>=', $hoy->copy()->subDays(7));
+        } elseif ($filterPeriodo === '30d') {
+            $qTotal->where('created_at', '>=', $hoy->copy()->subDays(30));
         }
 
         $totalPostulaciones = $qTotal->count();
@@ -141,7 +164,7 @@ class DashboardController extends Controller
                 return [
                     'id' => $c->id,
                     'titulo' => $c->titulo,
-                    'codigo' => $c->codigo ?? 'CONV-' . $c->id,
+                    'codigo' => $c->codigo_interno ?? $c->codigo ?? ('CONV-' . $c->id),
                     'fecha_inicio' => $c->fecha_inicio ? Carbon::parse($c->fecha_inicio)->format('d/m/Y') : '---',
                     'fecha_cierre' => $fechaCierre ? $fechaCierre->format('d/m/Y') : '---',
                     'dias_restantes' => $diasRestantes,
@@ -179,9 +202,19 @@ class DashboardController extends Controller
             $query->whereHas('oferta', fn($q) => $q->whereIn('sede_id', $allowedSedes));
         }
 
+        if ($filterSedeId) {
+            $query->whereHas('oferta', fn($q) => $q->where('sede_id', $filterSedeId));
+        }
+        if ($filterConvocatoriaId) {
+            $query->whereHas('oferta', fn($q) => $q->where('convocatoria_id', $filterConvocatoriaId));
+        }
+
         $actividadReciente = $query->latest()
-            ->take(10)
+            ->take(50)
             ->get();
+
+        $sedesCatalogo = Sede::orderBy('nombre')->get(['id_sede as id', 'nombre']);
+        $convocatoriasCatalogo = Convocatoria::orderBy('id', 'desc')->get(['id', 'titulo', 'codigo_interno as codigo']);
 
         return response()->json([
             'success' => true,
@@ -203,6 +236,8 @@ class DashboardController extends Controller
             'chart_cargos' => $cargosPostulados,
             'convocatorias_gestion' => $convocatoriasGestion,
             'cierres_criticos' => $convocatoriasGestion->where('is_urgente', true)->values(),
+            'sedes_catalogo' => $sedesCatalogo,
+            'convocatorias_catalogo' => $convocatoriasCatalogo,
             'recientes' => $actividadReciente->map(function($p) {
                 $post = $p->postulante;
                 $puntuacion = $p->evaluacion->puntuacion_total ?? null;
@@ -213,6 +248,8 @@ class DashboardController extends Controller
                     'foto' => $post?->foto_perfil_path ?? null,
                     'cargo' => $p->oferta->cargo->nombre ?? 'Cargo N/A',
                     'sede' => $p->oferta->sede->nombre ?? 'Sede N/A',
+                    'sede_id' => $p->oferta->sede_id ?? null,
+                    'convocatoria_id' => $p->oferta->convocatoria_id ?? null,
                     'convocatoria' => $p->oferta->convocatoria->titulo ?? 'General',
                     'estado' => $p->estado ?? 'enviada',
                     'puntuacion' => $puntuacion !== null ? (float)$puntuacion : null,
