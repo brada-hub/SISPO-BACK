@@ -25,7 +25,12 @@ class PostulacionController extends Controller
             'postulante.formacionesAcademicas.academicLevel',
             'postulante.formacionesAcademicas.career',
             'postulante.formacionesAcademicas.professionalArea',
+            'postulante.formacionesPostgrado',
+            'postulante.experienciasDocencia',
             'postulante.experienciasProfesionales',
+            'postulante.capacitaciones',
+            'postulante.produccionesIntelectuales',
+            'postulante.reconocimientos',
             'postulante.experienceSummary',
             'postulante.trainingSummary',
             'oferta.cargo',
@@ -184,10 +189,21 @@ class PostulacionController extends Controller
             $allowedSedes = $this->allowedSedeIds($user);
             $query = Postulacion::with([
                 'postulante.meritos.tipoDocumento',
+                'postulante.formacionesAcademicas.academicLevel',
+                'postulante.formacionesAcademicas.career',
+                'postulante.formacionesAcademicas.professionalArea',
+                'postulante.formacionesPostgrado',
+                'postulante.experienciasDocencia',
+                'postulante.experienciasProfesionales',
+                'postulante.capacitaciones',
+                'postulante.produccionesIntelectuales',
+                'postulante.reconocimientos',
                 'oferta.cargo',
                 'oferta.sede',
                 'oferta.convocatoria',
-                'evaluacion'
+                'evaluacion',
+                'evaluationResult',
+                'aiMatchingResult'
             ])
                 ->whereHas('oferta', function($q) use ($convocatoriaId, $user, $allowedConvocatorias, $allowedSedes) {
                     $q->where('convocatoria_id', $convocatoriaId);
@@ -258,30 +274,56 @@ class PostulacionController extends Controller
 
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Matriz Técnica');
+            $sheet->setTitle('Reporte Convocatoria');
+
+            // Status label mapping
+            $statusLabels = [
+                'enviada' => 'POSTULADO',
+                'en_revision' => 'EN EVALUACIÓN',
+                'validada' => 'PRESELECCIONADO',
+                'observada' => 'CON OBSERVACIÓN',
+                'rechazada' => 'NO SELECCIONADO',
+                'seleccionado' => 'SELECCIONADO',
+            ];
 
             // 1. Main Title
-            $sheet->setCellValue('A1', 'MATRIZ TÉCNICA DE POSTULACIONES - ' . strtoupper($convocatoria->titulo));
-            $coreHeaders = ['NO.', 'POSTULANTE', 'CI', 'CELULAR', 'EMAIL', 'ÁREA FORMACIÓN', 'AÑO TÍTULO', 'PRETENSIÓN (BS)'];
+            $sheet->setCellValue('A1', 'REPORTE GENERAL INTEGRAL DE POSTULACIONES Y MÉRITOS - ' . strtoupper($convocatoria->titulo));
+            $coreHeaders = [
+                'NO.',
+                'ESTADO',
+                'POSTULANTE',
+                'CI',
+                'CELULAR',
+                'EMAIL',
+                'SCORE EVALUACIÓN',
+                'PRETENSIÓN (BS)',
+                'FORMACIÓN ACADÉMICA (PREGRADO)',
+                'FORMACIÓN POSTGRADO',
+                'DOCENCIA UNIVERSITARIA',
+                'EXPERIENCIA PROFESIONAL',
+                'CAPACITACIONES Y CURSOS',
+                'PRODUCCIÓN INTELECTUAL',
+                'RECONOCIMIENTOS',
+                'REFERENCIAS'
+            ];
             $totalCols = count($coreHeaders) + count($meritHeaders) + 1; // +1 for Observations
             $lastColLetter = Coordinate::stringFromColumnIndex($totalCols);
             $sheet->mergeCells("A1:{$lastColLetter}1");
             $sheet->getStyle('A1')->applyFromArray([
-                'font' => ['bold' => true, 'size' => 16, 'color' => ['rgb' => 'FFFFFF']],
+                'font' => ['bold' => true, 'size' => 14, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4A148C']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER]
             ]);
             $sheet->getRowDimension(1)->setRowHeight(35);
 
             $currentRow = 3;
-            // Removed statusLabels as 'ESTADO' is no longer a core header
 
             foreach ($grouped as $groupName => $items) {
                 // Group Header
-                $sheet->setCellValue('A' . $currentRow, $groupName);
+                $sheet->setCellValue('A' . $currentRow, $groupName . ' (' . count($items) . ' POSTULANTES)');
                 $sheet->mergeCells("A{$currentRow}:{$lastColLetter}{$currentRow}");
                 $sheet->getStyle("A{$currentRow}")->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 12, 'color' => ['rgb' => 'FFFFFF']],
+                    'font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '009688']],
                 ]);
                 $sheet->getRowDimension($currentRow)->setRowHeight(25);
@@ -297,7 +339,7 @@ class PostulacionController extends Controller
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
                     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
                 ]);
-                $sheet->getRowDimension($currentRow)->setRowHeight(45);
+                $sheet->getRowDimension($currentRow)->setRowHeight(35);
                 $currentRow++;
 
                 // Data
@@ -305,29 +347,145 @@ class PostulacionController extends Controller
                 foreach ($items as $p) {
                     $post = $p->postulante;
 
-                    // Extract Area and Year (Same as Matrix UI) - ADDED SAFETY CHECKS
-                    $formacion = $post->meritos->where('tipoDocumento.nombre', 'FORMACIÓN ACADÉMICA')->first();
-                    $area = '-';
-                    $anio = '-';
-
-                    if ($formacion && !empty($formacion->respuestas)) {
-                        $respuestas = is_array($formacion->respuestas) ? $formacion->respuestas : json_decode($formacion->respuestas, true);
-                        if (is_array($respuestas)) {
-                            $area = strtoupper($respuestas['profesion'] ?? '-');
-                            $fechaTit = $respuestas['fecha_titulo'] ?? '';
-                            $anio = $fechaTit ? substr($fechaTit, 0, 4) : '-';
+                    // 1. Formaciones Académicas (Pregrado)
+                    $formList = [];
+                    if ($post && $post->formacionesAcademicas && count($post->formacionesAcademicas) > 0) {
+                        foreach ($post->formacionesAcademicas as $idx => $f) {
+                            $nivel = $f->academicLevel->name ?? $f->nivel_academico_raw ?? 'LICENCIATURA';
+                            $carrera = $f->career->name ?? $f->carrera_raw ?? 'CARRERA';
+                            $univ = $f->universidad ?? '';
+                            $anio = $f->fecha_titulo ? substr($f->fecha_titulo, 0, 4) : '';
+                            $formList[] = "[" . ($idx + 1) . "] {$nivel}: {$carrera} | {$univ} | Año: {$anio}";
                         }
                     }
+                    if (empty($formList) && $post && $post->meritos) {
+                        $meritoPre = $post->meritos->where('tipoDocumento.nombre', 'FORMACIÓN ACADÉMICA')->first();
+                        if ($meritoPre && !empty($meritoPre->respuestas)) {
+                            $resp = is_array($meritoPre->respuestas) ? $meritoPre->respuestas : json_decode($meritoPre->respuestas, true);
+                            if (is_array($resp)) {
+                                $prof = $resp['profesion'] ?? $resp['carrera'] ?? '';
+                                $univ = $resp['universidad'] ?? '';
+                                $anio = !empty($resp['fecha_titulo']) ? substr($resp['fecha_titulo'], 0, 4) : '';
+                                if ($prof) $formList[] = "[1] {$prof} | {$univ} | Año: {$anio}";
+                            }
+                        }
+                    }
+                    $formacionStr = !empty($formList) ? implode("\n", $formList) : '-';
+
+                    // 2. Formaciones Postgrado
+                    $posList = [];
+                    if ($post && $post->formacionesPostgrado && count($post->formacionesPostgrado) > 0) {
+                        foreach ($post->formacionesPostgrado as $idx => $pos) {
+                            $tipo = $pos->tipo_postgrado ?? 'POSTGRADO';
+                            $tit = $pos->titulo_postgrado ?? 'TÍTULO';
+                            $univ = $pos->universidad ?? '';
+                            $posList[] = "[" . ($idx + 1) . "] {$tipo}: {$tit} | {$univ}";
+                        }
+                    }
+                    if (empty($posList) && $post && $post->meritos) {
+                        $meritoPos = $post->meritos->first(function($m) {
+                            $nom = strtoupper($m->tipoDocumento->nombre ?? '');
+                            return str_contains($nom, 'POSTGRADO') || str_contains($nom, 'POSGRADO');
+                        });
+                        if ($meritoPos && !empty($meritoPos->respuestas)) {
+                            $resp = is_array($meritoPos->respuestas) ? $meritoPos->respuestas : json_decode($meritoPos->respuestas, true);
+                            if (is_array($resp)) {
+                                $posList[] = "[1] " . ($resp['titulo'] ?? $resp['tipo'] ?? 'POSTGRADO') . " | " . ($resp['institucion'] ?? '');
+                            }
+                        }
+                    }
+                    $postgradoStr = !empty($posList) ? implode("\n", $posList) : '-';
+
+                    // 3. Experiencia Docencia
+                    $docList = [];
+                    if ($post && $post->experienciasDocencia && count($post->experienciasDocencia) > 0) {
+                        foreach ($post->experienciasDocencia as $idx => $doc) {
+                            $asig = $doc->asignatura ?? 'ASIGNATURA';
+                            $univ = $doc->universidad ?? '';
+                            $tipo = $doc->tipo_docencia ?? '';
+                            $docList[] = "[" . ($idx + 1) . "] {$asig} | {$univ} | {$tipo}";
+                        }
+                    }
+                    $docenciaStr = !empty($docList) ? implode("\n", $docList) : '-';
+
+                    // 4. Experiencia Profesional
+                    $expList = [];
+                    if ($post && $post->experienciasProfesionales && count($post->experienciasProfesionales) > 0) {
+                        foreach ($post->experienciasProfesionales as $idx => $exp) {
+                            $carg = $exp->cargo_desempenado ?? 'CARGO';
+                            $inst = $exp->institucion_empresa ?? '';
+                            $expList[] = "[" . ($idx + 1) . "] {$carg} | {$inst}";
+                        }
+                    }
+                    $expProfStr = !empty($expList) ? implode("\n", $expList) : '-';
+
+                    // 5. Capacitaciones
+                    $capList = [];
+                    if ($post && $post->capacitaciones && count($post->capacitaciones) > 0) {
+                        foreach ($post->capacitaciones as $idx => $cap) {
+                            $nom = $cap->nombre_curso ?? 'CURSO';
+                            $inst = $cap->institucion ?? '';
+                            $hrs = $cap->horas_academicas ? "({$cap->horas_academicas} hrs)" : '';
+                            $capList[] = "[" . ($idx + 1) . "] {$nom} | {$inst} {$hrs}";
+                        }
+                    }
+                    $capStr = !empty($capList) ? implode("\n", $capList) : '-';
+
+                    // 6. Producción Intelectual
+                    $prodList = [];
+                    if ($post && $post->produccionesIntelectuales && count($post->produccionesIntelectuales) > 0) {
+                        foreach ($post->produccionesIntelectuales as $idx => $prod) {
+                            $tipo = $prod->tipo_produccion ?? 'PUBLICACIÓN';
+                            $tit = $prod->titulo_obra ?? 'TÍTULO';
+                            $prodList[] = "[" . ($idx + 1) . "] {$tipo}: {$tit}";
+                        }
+                    }
+                    $prodStr = !empty($prodList) ? implode("\n", $prodList) : '-';
+
+                    // 7. Reconocimientos
+                    $recList = [];
+                    if ($post && $post->reconocimientos && count($post->reconocimientos) > 0) {
+                        foreach ($post->reconocimientos as $idx => $rec) {
+                            $desc = $rec->descripcion_reconocimiento ?? 'DISTINCIÓN';
+                            $inst = $rec->institucion_otorgante ?? '';
+                            $recList[] = "[" . ($idx + 1) . "] {$desc} | {$inst}";
+                        }
+                    }
+                    $recStr = !empty($recList) ? implode("\n", $recList) : '-';
+
+                    // 8. Referencias
+                    $refList = [];
+                    if ($post && $post->ref_personal_celular) {
+                        $refList[] = "Personal: " . ($post->ref_personal_parentesco ? "({$post->ref_personal_parentesco}) " : "") . "Cel: {$post->ref_personal_celular}";
+                    }
+                    if ($post && ($post->ref_laboral_celular || $post->ref_laboral_detalle)) {
+                        $refList[] = "Laboral: " . ($post->ref_laboral_detalle ?? '') . " Cel: " . ($post->ref_laboral_celular ?? '-');
+                    }
+                    $refStr = !empty($refList) ? implode("\n", $refList) : '-';
+
+                    // Score
+                    $scoreVal = $p->evaluacion->score_total ?? $p->evaluacion->puntaje_total ?? null;
+                    $scoreStr = ($scoreVal !== null && $scoreVal !== '') ? (string)round((float)$scoreVal, 2) . ' pts' : 'SIN EVALUAR';
+
+                    $estadoStr = $statusLabels[$p->estado] ?? strtoupper($p->estado ?? '-');
 
                     $dataRow = [
                         $counter++,
+                        $estadoStr,
                         strtoupper(($post->nombres ?? '') . ' ' . ($post->apellidos ?? '')),
                         $post->ci ?? '-',
                         $post->celular ?? '-',
                         strtolower($post->email ?? '-'),
-                        $area,
-                        $anio,
-                        (float)($p->pretension_salarial ?? 0)
+                        $scoreStr,
+                        (float)($p->pretension_salarial ?? 0),
+                        $formacionStr,
+                        $postgradoStr,
+                        $docenciaStr,
+                        $expProfStr,
+                        $capStr,
+                        $prodStr,
+                        $recStr,
+                        $refStr
                     ];
 
                     // Dynamic Merit Values
@@ -353,7 +511,7 @@ class PostulacionController extends Controller
 
                     $sheet->fromArray([$dataRow], null, 'A' . $currentRow);
 
-                    // Formatting for numeric Pretension
+                    // Formatting for numeric Pretension (column 8)
                     $pretCol = Coordinate::stringFromColumnIndex(8);
                     $sheet->getStyle("{$pretCol}{$currentRow}")->getNumberFormat()->setFormatCode('#,##0');
 
