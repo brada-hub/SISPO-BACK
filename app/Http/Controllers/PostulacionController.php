@@ -23,6 +23,8 @@ class PostulacionController extends Controller
         $query = Postulacion::with([
             'postulante.meritos.tipoDocumento',
             'postulante.formacionesAcademicas.academicLevel',
+            'postulante.formacionesAcademicas.career',
+            'postulante.formacionesAcademicas.professionalArea',
             'postulante.experienciasProfesionales',
             'postulante.experienceSummary',
             'postulante.trainingSummary',
@@ -73,6 +75,8 @@ class PostulacionController extends Controller
         $query = Postulacion::with([
             'postulante.meritos.tipoDocumento',
             'postulante.formacionesAcademicas.academicLevel',
+            'postulante.formacionesAcademicas.career',
+            'postulante.formacionesAcademicas.professionalArea',
             'postulante.experienciasProfesionales',
             'postulante.experienceSummary',
             'postulante.trainingSummary',
