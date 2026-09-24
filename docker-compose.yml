@@ -19,6 +19,11 @@ services:
       - DB_DATABASE=${DB_DATABASE:-sispo_db}
       - DB_USERNAME=${DB_USERNAME:-root}
       - DB_PASSWORD=${DB_PASSWORD:-root_th_seguro2026}
+      - DB_CORE_HOST=${DB_CORE_HOST:-th-mysql}
+      - DB_CORE_PORT=${DB_CORE_PORT:-3306}
+      - DB_CORE_DATABASE=${DB_CORE_DATABASE:-sigeth_db}
+      - DB_CORE_USERNAME=${DB_CORE_USERNAME:-root}
+      - DB_CORE_PASSWORD=${DB_CORE_PASSWORD:-root_th_seguro2026}
       - SANCTUM_STATEFUL_DOMAINS=postulaciones.unitepc.pro,api.sispo.unitepc.pro,sigeth.unitepc.pro
     volumes:
       - sispo_storage:/var/www/html/storage
