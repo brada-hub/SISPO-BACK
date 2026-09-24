@@ -27,6 +27,7 @@ services:
       - SANCTUM_STATEFUL_DOMAINS=postulaciones.unitepc.pro,api.sispo.unitepc.pro,sigeth.unitepc.pro
     volumes:
       - sispo_storage:/var/www/html/storage
+      - /var/www:/host_www:ro
     networks:
       - th-ecosystem
 
