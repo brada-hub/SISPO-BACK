@@ -18,6 +18,11 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
+        'https://postulaciones.unitepc.pro',
+        'https://api.sispo.unitepc.pro',
+        'https://sigeth.unitepc.pro',
+        'https://api.sigeth.unitepc.pro',
+        'https://sigva.unitepc.pro',
         'https://postulacionesunitepc.xpertiaplus.com',
         'https://sipost.xpertiaplus.com',
         'https://sispo.xpertiaplus.com',

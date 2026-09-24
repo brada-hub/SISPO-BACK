@@ -6,19 +6,28 @@ services:
     container_name: sispo-backend
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "${PORT:-8001}:8001"
     environment:
       - APP_NAME=SISPO
-      - APP_ENV=${APP_ENV:-local}
-      - APP_DEBUG=${APP_DEBUG:-true}
-      - APP_URL=${APP_URL:-http://localhost:8001}
+      - APP_ENV=${APP_ENV:-production}
+      - APP_KEY=${APP_KEY:-base64:CqLKMbVAwp88J+O8Ijccpx6g+DhmBduQJc6pycMzwYg=}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - APP_URL=${APP_URL:-https://api.sispo.unitepc.pro}
       - DB_CONNECTION=mysql
-      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_HOST=${DB_HOST:-th-mysql}
       - DB_PORT=${DB_PORT:-3306}
       - DB_DATABASE=${DB_DATABASE:-sispo_db}
       - DB_USERNAME=${DB_USERNAME:-root}
-      - DB_PASSWORD=${DB_PASSWORD:-admin123}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - DB_PASSWORD=${DB_PASSWORD:-root_th_seguro2026}
+      - SANCTUM_STATEFUL_DOMAINS=postulaciones.unitepc.pro,api.sispo.unitepc.pro,sigeth.unitepc.pro
     volumes:
-      - ./storage:/var/www/html/storage
+      - sispo_storage:/var/www/html/storage
+    networks:
+      - th-ecosystem
+
+volumes:
+  sispo_storage:
+
+networks:
+  th-ecosystem:
+    external: true

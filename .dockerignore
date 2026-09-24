@@ -19,3 +19,5 @@ docker-compose*.yml
 .dockerignore
 .vscode
 .idea
+bootstrap/cache/*.php
+!bootstrap/cache/.gitignore
