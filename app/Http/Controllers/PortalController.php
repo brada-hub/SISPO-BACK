@@ -485,6 +485,7 @@ class PortalController extends Controller
                 $postulante->save();
 
                 $meritosInput = $request->input('meritos', []);
+                $archivosPorMerito = [];
                 foreach ($dbData['meritosCreated'] as $mInfo) {
                     $index = $mInfo['index'];
                     $tokens = $meritosInput[$index]['archivo_tokens'] ?? [];
@@ -498,8 +499,12 @@ class PortalController extends Controller
                             ['merito_id' => $mInfo['id'], 'config_archivo_id' => $configId],
                             ['archivo_path' => $path]
                         );
+                        $archivosPorMerito[$mInfo['id']][$configId] = $path;
                     }
                 }
+
+                // Sincronizar inmediatamente a tablas normalizadas para el expediente
+                $this->sincronizarMeritosNormalizados($postulante, $dbData['meritosCreated'], $meritosInput, $archivosPorMerito);
 
                 Postulacion::whereIn('id', $dbData['postulacionIds'])
                     ->where('postulante_id', $postulante->id)
@@ -553,6 +558,132 @@ class PortalController extends Controller
         Storage::disk('public')->move($source, $target);
 
         return $target;
+    }
+
+    /**
+     * Sincroniza directamente los méritos postulados en las 7 tablas normalizadas
+     * para que aparezcan inmediatamente en el expediente y scoring.
+     */
+    private function sincronizarMeritosNormalizados(Postulante $postulante, array $meritosCreated, array $meritosInput, array $archivosPorMerito): void
+    {
+        foreach ($meritosCreated as $mInfo) {
+            $index = $mInfo['index'];
+            $meritoId = $mInfo['id'];
+            $mData = $meritosInput[$index] ?? [];
+            $tipoId = (int)($mData['tipo_documento_id'] ?? 0);
+            $respuestas = is_string($mData['respuestas'] ?? null) 
+                ? json_decode($mData['respuestas'], true) 
+                : ($mData['respuestas'] ?? []);
+            
+            $archivos = $archivosPorMerito[$meritoId] ?? [];
+
+            // Si no hay respuestas y no hay archivos, no crear fila vacía
+            $hasResponses = is_array($respuestas) && count(array_filter($respuestas, fn($v) => $v !== null && $v !== '')) > 0;
+            $hasFiles = count($archivos) > 0;
+            if (!$hasResponses && !hasFiles) {
+                continue;
+            }
+
+            $modelClass = match ($tipoId) {
+                1 => \App\Models\FormacionAcademica::class,
+                2 => \App\Models\FormacionPostgrado::class,
+                3 => \App\Models\ExperienciaDocencia::class,
+                4 => \App\Models\ExperienciaProfesional::class,
+                5 => \App\Models\Capacitacion::class,
+                6 => \App\Models\ProduccionIntelectual::class,
+                7 => \App\Models\Reconocimiento::class,
+                default => null,
+            };
+
+            if (!$modelClass) {
+                continue;
+            }
+
+            $row = $modelClass::where('source_merito_id', $meritoId)->first();
+            if (!$row) {
+                $row = new $modelClass();
+                $row->postulante_id = $postulante->id;
+                $row->source_merito_id = $meritoId;
+            }
+
+            if ($tipoId === 1) {
+                $row->nivel_academico_raw = $respuestas['nivel'] ?? ($respuestas['nivel_maximo'] ?? null);
+                $row->nivel_academico_normalizado = $row->nivel_academico_raw;
+                $row->universidad = $respuestas['universidad'] ?? null;
+                $row->carrera_raw = $respuestas['profesion'] ?? ($respuestas['carrera'] ?? null);
+                $row->fecha_diploma = !empty($respuestas['fecha_diploma']) ? $respuestas['fecha_diploma'] : null;
+                $row->fecha_titulo = !empty($respuestas['fecha_titulo']) ? $respuestas['fecha_titulo'] : null;
+                if (!empty($archivos['diploma'])) {
+                    $row->diploma_archivo_path = $archivos['diploma'];
+                }
+                if (!empty($archivos['titulo'])) {
+                    $row->titulo_archivo_path = $archivos['titulo'];
+                }
+            } elseif ($tipoId === 2) {
+                $row->tipo_posgrado_raw = $respuestas['tipo_posgrado'] ?? null;
+                $row->tipo_posgrado_normalizado = $row->tipo_posgrado_raw;
+                $row->nombre_programa = $respuestas['nombre_programa'] ?? null;
+                $row->fecha_certificacion = !empty($respuestas['fecha_certificacion']) ? $respuestas['fecha_certificacion'] : (!empty($respuestas['fecha']) ? $respuestas['fecha'] : null);
+                $row->institucion = $respuestas['institucion'] ?? ($respuestas['universidad'] ?? null);
+                if (!empty($archivos['certificado'])) {
+                    $row->certificado_archivo_path = $archivos['certificado'];
+                }
+            } elseif ($tipoId === 3) {
+                $row->universidad = $respuestas['universidad'] ?? null;
+                $row->carrera_raw = $respuestas['carrera'] ?? null;
+                $row->asignaturas = $respuestas['asignaturas'] ?? ($respuestas['materia_asignatura'] ?? null);
+                $row->gestion_periodo = $respuestas['gestion_periodo'] ?? null;
+                if (!empty($archivos['respaldo'])) {
+                    $row->respaldo_archivo_path = $archivos['respaldo'];
+                }
+            } elseif ($tipoId === 4) {
+                $row->cargo_raw = $respuestas['cargo'] ?? null;
+                $row->empresa = $respuestas['empresa'] ?? ($respuestas['institucion'] ?? null);
+                $row->fecha_inicio = !empty($respuestas['fecha_inicio']) ? $respuestas['fecha_inicio'] : null;
+                $row->fecha_fin = !empty($respuestas['fecha_fin']) ? $respuestas['fecha_fin'] : null;
+                $months = 0;
+                if (!empty($row->fecha_inicio) && !empty($row->fecha_fin)) {
+                    try {
+                        $start = new \DateTime($row->fecha_inicio);
+                        $end = new \DateTime($row->fecha_fin);
+                        $diff = $start->diff($end);
+                        $months = ($diff->y * 12) + $diff->m;
+                    } catch (\Exception $ex) {}
+                }
+                $row->duracion_meses = $months;
+                if (!empty($archivos['certificado'])) {
+                    $row->certificado_archivo_path = $archivos['certificado'];
+                }
+            } elseif ($tipoId === 5) {
+                $row->nombre_curso = $respuestas['nombre'] ?? ($respuestas['nombre_curso'] ?? null);
+                $row->fecha = !empty($respuestas['fecha']) ? $respuestas['fecha'] : null;
+                $row->institucion_organizadora = $respuestas['institucion'] ?? null;
+                $row->carga_horaria = (int)($respuestas['horas'] ?? ($respuestas['horas_academicas'] ?? 0));
+                if (!empty($archivos['certificado'])) {
+                    $row->certificado_archivo_path = $archivos['certificado'];
+                }
+            } elseif ($tipoId === 6) {
+                $row->tipo_produccion_raw = $respuestas['tipo'] ?? ($respuestas['tipo_produccion'] ?? null);
+                $row->tipo_produccion_normalizado = $row->tipo_produccion_raw;
+                $row->titulo = $respuestas['titulo'] ?? ($respuestas['titulo_produccion'] ?? null);
+                $row->fecha_publicacion = !empty($respuestas['fecha']) ? $respuestas['fecha'] : (!empty($respuestas['fecha_publicacion']) ? $respuestas['fecha_publicacion'] : null);
+                $row->editorial_revista = $respuestas['editorial'] ?? null;
+                $row->lugar = $respuestas['lugar'] ?? null;
+                if (!empty($archivos['evidencia'])) {
+                    $row->evidencia_archivo_path = $archivos['evidencia'];
+                }
+            } elseif ($tipoId === 7) {
+                $row->titulo_reconocimiento = $respuestas['titulo'] ?? ($respuestas['titulo_reconocimiento'] ?? null);
+                $row->fecha = !empty($respuestas['fecha']) ? $respuestas['fecha'] : null;
+                $row->institucion_otorgante = $respuestas['institucion'] ?? ($respuestas['institucion_otorgante'] ?? null);
+                $row->lugar = $respuestas['lugar'] ?? null;
+                if (!empty($archivos['reconocimiento'])) {
+                    $row->reconocimiento_archivo_path = $archivos['reconocimiento'];
+                }
+            }
+
+            $row->save();
+        }
     }
 
     /**

@@ -11,12 +11,12 @@ class UserController extends Controller
     public function index()
     {
         $users = User::with(['roles', 'sede', 'persona'])
-            ->whereHas('roles.permissions', function ($permissionQuery) {
-                $permissionQuery->where('sistema_id', 2);
+            ->whereHas('roles', function ($roleQuery) {
+                $roleQuery->where('sistema_id', 2);
             })
             ->get()
             ->map(function (User $user) {
-                $role = $user->roles->first();
+                $role = $user->roles->firstWhere('sistema_id', 2) ?? $user->roles->first();
 
                 return [
                     'id' => $user->id_user,
@@ -59,7 +59,7 @@ class UserController extends Controller
 
     public function show(User $usuario)
     {
-        $role = $usuario->roles->first();
+        $role = $usuario->roles->firstWhere('sistema_id', 2) ?? $usuario->roles->first();
 
         return response()->json([
             'id' => $usuario->id_user,
@@ -265,7 +265,7 @@ class UserController extends Controller
     {
         $allPermissions = \App\Models\Permission::where('sistema_id', 2)->get();
         $userIndividualPermissionsIds = $usuario->individualPermissions()->pluck('permission_id')->toArray();
-        $role = $usuario->roles->first();
+        $role = $usuario->roles->firstWhere('sistema_id', 2) ?? $usuario->roles->first();
         $rolePermissionsIds = $role ? $role->permissions()->pluck('permission_id')->toArray() : [];
 
         return response()->json([
@@ -282,7 +282,7 @@ class UserController extends Controller
             'permissions.*' => 'exists:core.permissions,id_permision',
         ]);
 
-        $usuario->individualPermissions()->syncWithPivotValues($request->permissions, ['model_type' => User::class]);
+        $usuario->individualPermissions()->sync($request->permissions);
 
         return response()->json([
             'success' => true,

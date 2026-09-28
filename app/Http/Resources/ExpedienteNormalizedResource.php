@@ -89,113 +89,225 @@ class ExpedienteNormalizedResource extends JsonResource
         return null;
     }
 
+    private function fallbackMeritos($postulanteId, int $tipoId, callable $mapper): array
+    {
+        if (!$postulanteId) return [];
+        try {
+            $raw = DB::table('postulante_meritos')
+                ->where('postulante_id', $postulanteId)
+                ->where('tipo_documento_id', $tipoId)
+                ->get();
+            return $raw->map(function($m) use ($mapper) {
+                $resp = is_string($m->respuestas) ? json_decode($m->respuestas, true) : (array)($m->respuestas ?? []);
+                return $mapper($resp, $m->id);
+            })->toArray();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     private function mapFormacionesAcademicas($postulante): array
     {
         $rows = $postulante->formacionesAcademicas ?? collect();
-        return $rows->map(function ($row) {
+        if ($rows->isNotEmpty()) {
+            return $rows->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'nivel_academico' => $row->nivel_academico_raw,
+                    'universidad' => $row->universidad,
+                    'carrera' => $row->carrera_raw,
+                    'fecha_diploma' => $row->fecha_diploma,
+                    'fecha_titulo' => $row->fecha_titulo,
+                    'diploma_archivo_path' => $this->getFileWithFallback($row, 'diploma_archivo_path', 'diploma'),
+                    'titulo_archivo_path' => $this->getFileWithFallback($row, 'titulo_archivo_path', 'titulo'),
+                ];
+            })->toArray();
+        }
+
+        return $this->fallbackMeritos($postulante->id, 1, function($resp, $id) {
             return [
-                'id' => $row->id,
-                'nivel_academico' => $row->nivel_academico_raw,
-                'universidad' => $row->universidad,
-                'carrera' => $row->carrera_raw,
-                'fecha_diploma' => $row->fecha_diploma,
-                'fecha_titulo' => $row->fecha_titulo,
-                'diploma_archivo_path' => $this->getFileWithFallback($row, 'diploma_archivo_path', 'diploma'),
-                'titulo_archivo_path' => $this->getFileWithFallback($row, 'titulo_archivo_path', 'titulo'),
+                'id' => $id,
+                'nivel_academico' => $resp['nivel'] ?? ($resp['nivel_maximo'] ?? null),
+                'universidad' => $resp['universidad'] ?? null,
+                'carrera' => $resp['profesion'] ?? ($resp['carrera'] ?? null),
+                'fecha_diploma' => $resp['fecha_diploma'] ?? null,
+                'fecha_titulo' => $resp['fecha_titulo'] ?? null,
+                'diploma_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'diploma')->value('archivo_path'),
+                'titulo_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'titulo')->value('archivo_path'),
             ];
-        })->toArray();
+        });
     }
 
     private function mapFormacionesPostgrado($postulante): array
     {
         $rows = $postulante->formacionesPostgrado ?? collect();
-        return $rows->map(function ($row) {
+        if ($rows->isNotEmpty()) {
+            return $rows->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'tipo_posgrado' => $row->tipo_posgrado_raw,
+                    'nombre_programa' => $row->nombre_programa,
+                    'fecha_certificacion' => $row->fecha_certificacion,
+                    'institucion' => $row->institucion,
+                    'certificado_archivo_path' => $this->getFileWithFallback($row, 'certificado_archivo_path', 'certificado'),
+                ];
+            })->toArray();
+        }
+
+        return $this->fallbackMeritos($postulante->id, 2, function($resp, $id) {
             return [
-                'id' => $row->id,
-                'tipo_posgrado' => $row->tipo_posgrado_raw,
-                'nombre_programa' => $row->nombre_programa,
-                'fecha_certificacion' => $row->fecha_certificacion,
-                'institucion' => $row->institucion,
-                'certificado_archivo_path' => $this->getFileWithFallback($row, 'certificado_archivo_path', 'certificado'),
+                'id' => $id,
+                'tipo_posgrado' => $resp['tipo_posgrado'] ?? null,
+                'nombre_programa' => $resp['nombre_programa'] ?? null,
+                'fecha_certificacion' => $resp['fecha_certificacion'] ?? ($resp['fecha'] ?? null),
+                'institucion' => $resp['institucion'] ?? ($resp['universidad'] ?? null),
+                'certificado_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'certificado')->value('archivo_path'),
             ];
-        })->toArray();
+        });
     }
 
     private function mapExperienciasProfesionales($postulante): array
     {
         $rows = $postulante->experienciasProfesionales ?? collect();
-        return $rows->map(function ($row) {
+        if ($rows->isNotEmpty()) {
+            return $rows->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'cargo' => $row->cargo_raw,
+                    'empresa' => $row->empresa,
+                    'fecha_inicio' => $row->fecha_inicio,
+                    'fecha_fin' => $row->fecha_fin,
+                    'duracion_meses' => $row->duracion_meses,
+                    'certificado_archivo_path' => $this->getFileWithFallback($row, 'certificado_archivo_path', 'certificado'),
+                ];
+            })->toArray();
+        }
+
+        return $this->fallbackMeritos($postulante->id, 4, function($resp, $id) {
             return [
-                'id' => $row->id,
-                'cargo' => $row->cargo_raw,
-                'empresa' => $row->empresa,
-                'fecha_inicio' => $row->fecha_inicio,
-                'fecha_fin' => $row->fecha_fin,
-                'duracion_meses' => $row->duracion_meses,
-                'certificado_archivo_path' => $this->getFileWithFallback($row, 'certificado_archivo_path', 'certificado'),
+                'id' => $id,
+                'cargo' => $resp['cargo'] ?? null,
+                'empresa' => $resp['empresa'] ?? ($resp['institucion'] ?? null),
+                'fecha_inicio' => $resp['fecha_inicio'] ?? null,
+                'fecha_fin' => $resp['fecha_fin'] ?? null,
+                'duracion_meses' => 0,
+                'certificado_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'certificado')->value('archivo_path'),
             ];
-        })->toArray();
+        });
     }
 
     private function mapExperienciasDocencia($postulante): array
     {
         $rows = $postulante->experienciasDocencia ?? collect();
-        return $rows->map(function ($row) {
+        if ($rows->isNotEmpty()) {
+            return $rows->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'universidad' => $row->universidad,
+                    'carrera' => $row->carrera_raw,
+                    'asignaturas' => $row->asignaturas,
+                    'gestion_periodo' => $row->gestion_periodo,
+                    'respaldo_archivo_path' => $this->getFileWithFallback($row, 'respaldo_archivo_path', 'respaldo'),
+                ];
+            })->toArray();
+        }
+
+        return $this->fallbackMeritos($postulante->id, 3, function($resp, $id) {
             return [
-                'id' => $row->id,
-                'universidad' => $row->universidad,
-                'carrera' => $row->carrera_raw,
-                'asignaturas' => $row->asignaturas,
-                'gestion_periodo' => $row->gestion_periodo,
-                'respaldo_archivo_path' => $this->getFileWithFallback($row, 'respaldo_archivo_path', 'respaldo'),
+                'id' => $id,
+                'universidad' => $resp['universidad'] ?? null,
+                'carrera' => $resp['carrera'] ?? null,
+                'asignaturas' => $resp['asignaturas'] ?? ($resp['materia_asignatura'] ?? null),
+                'gestion_periodo' => $resp['gestion_periodo'] ?? null,
+                'respaldo_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'respaldo')->value('archivo_path'),
             ];
-        })->toArray();
+        });
     }
 
     private function mapCapacitaciones($postulante): array
     {
         $rows = $postulante->capacitaciones ?? collect();
-        return $rows->map(function ($row) {
+        if ($rows->isNotEmpty()) {
+            return $rows->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'nombre_curso' => $row->nombre_curso,
+                    'fecha' => $row->fecha,
+                    'institucion_organizadora' => $row->institucion_organizadora,
+                    'carga_horaria' => $row->carga_horaria,
+                    'certificado_archivo_path' => $this->getFileWithFallback($row, 'certificado_archivo_path', 'certificado'),
+                ];
+            })->toArray();
+        }
+
+        return $this->fallbackMeritos($postulante->id, 5, function($resp, $id) {
             return [
-                'id' => $row->id,
-                'nombre_curso' => $row->nombre_curso,
-                'fecha' => $row->fecha,
-                'institucion_organizadora' => $row->institucion_organizadora,
-                'carga_horaria' => $row->carga_horaria,
-                'certificado_archivo_path' => $this->getFileWithFallback($row, 'certificado_archivo_path', 'certificado'),
+                'id' => $id,
+                'nombre_curso' => $resp['nombre'] ?? ($resp['nombre_curso'] ?? null),
+                'fecha' => $resp['fecha'] ?? null,
+                'institucion_organizadora' => $resp['institucion'] ?? null,
+                'carga_horaria' => (int)($resp['horas'] ?? ($resp['horas_academicas'] ?? 0)),
+                'certificado_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'certificado')->value('archivo_path'),
             ];
-        })->toArray();
+        });
     }
 
     private function mapProduccionesIntelectuales($postulante): array
     {
         $rows = $postulante->produccionesIntelectuales ?? collect();
-        return $rows->map(function ($row) {
+        if ($rows->isNotEmpty()) {
+            return $rows->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'tipo_produccion' => $row->tipo_produccion_raw,
+                    'titulo' => $row->titulo,
+                    'fecha_publicacion' => $row->fecha_publicacion,
+                    'editorial_revista' => $row->editorial_revista,
+                    'lugar' => $row->lugar,
+                    'evidencia_archivo_path' => $this->getFileWithFallback($row, 'evidencia_archivo_path', 'evidencia'),
+                ];
+            })->toArray();
+        }
+
+        return $this->fallbackMeritos($postulante->id, 6, function($resp, $id) {
             return [
-                'id' => $row->id,
-                'tipo_produccion' => $row->tipo_produccion_raw,
-                'titulo' => $row->titulo,
-                'fecha_publicacion' => $row->fecha_publicacion,
-                'editorial_revista' => $row->editorial_revista,
-                'lugar' => $row->lugar,
-                'evidencia_archivo_path' => $this->getFileWithFallback($row, 'evidencia_archivo_path', 'evidencia'),
+                'id' => $id,
+                'tipo_produccion' => $resp['tipo'] ?? ($resp['tipo_produccion'] ?? null),
+                'titulo' => $resp['titulo'] ?? ($resp['titulo_produccion'] ?? null),
+                'fecha_publicacion' => $resp['fecha'] ?? ($resp['fecha_publicacion'] ?? null),
+                'editorial_revista' => $resp['editorial'] ?? null,
+                'lugar' => $resp['lugar'] ?? null,
+                'evidencia_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'evidencia')->value('archivo_path'),
             ];
-        })->toArray();
+        });
     }
 
     private function mapReconocimientos($postulante): array
     {
         $rows = $postulante->reconocimientos ?? collect();
-        return $rows->map(function ($row) {
+        if ($rows->isNotEmpty()) {
+            return $rows->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'titulo_reconocimiento' => $row->titulo_reconocimiento,
+                    'fecha' => $row->fecha,
+                    'institucion_otorgante' => $row->institucion_otorgante,
+                    'lugar' => $row->lugar,
+                    'reconocimiento_archivo_path' => $this->getFileWithFallback($row, 'reconocimiento_archivo_path', 'reconocimiento'),
+                ];
+            })->toArray();
+        }
+
+        return $this->fallbackMeritos($postulante->id, 7, function($resp, $id) {
             return [
-                'id' => $row->id,
-                'titulo_reconocimiento' => $row->titulo_reconocimiento,
-                'fecha' => $row->fecha,
-                'institucion_otorgante' => $row->institucion_otorgante,
-                'lugar' => $row->lugar,
-                'reconocimiento_archivo_path' => $this->getFileWithFallback($row, 'reconocimiento_archivo_path', 'reconocimiento'),
+                'id' => $id,
+                'titulo_reconocimiento' => $resp['titulo'] ?? ($resp['titulo_reconocimiento'] ?? null),
+                'fecha' => $resp['fecha'] ?? null,
+                'institucion_otorgante' => $resp['institucion'] ?? ($resp['institucion_otorgante'] ?? null),
+                'lugar' => $resp['lugar'] ?? null,
+                'reconocimiento_archivo_path' => DB::table('merito_archivos')->where('merito_id', $id)->where('config_archivo_id', 'reconocimiento')->value('archivo_path'),
             ];
-        })->toArray();
+        });
     }
 
     private function buildVirtualMeritos($postulante): array

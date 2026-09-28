@@ -126,7 +126,17 @@ class User extends Authenticatable implements JWTSubject
     public function getRolAttribute()
     {
         try {
-            return $this->roles->first();
+            $sispoRole = $this->roles->firstWhere('sistema_id', 2);
+            if ($sispoRole) {
+                return $sispoRole;
+            }
+
+            // Fallback ONLY if user is a Global Super Admin from SIGETH (sistema_id: 1)
+            $globalAdmin = $this->roles->first(function ($r) {
+                return (int)($r->sistema_id ?? 0) === 1 && in_array(strtoupper(trim($r->nombres ?? '')), ['ADMINISTRADOR', 'ADMIN', 'SUPER ADMIN', 'SUPERADMIN', 'DIRECTOR (ENCARGADO)']);
+            });
+
+            return $globalAdmin ?: null;
         } catch (\Throwable) {
             return null;
         }
@@ -134,7 +144,17 @@ class User extends Authenticatable implements JWTSubject
 
     public function sede()
     {
-        return $this->belongsTo(Sede::class, 'sede_id', 'id_sede');
+        return $this->belongsTo(Sede::class, 'id_sede_scope', 'id_sede');
+    }
+
+    public function getSedeIdAttribute()
+    {
+        return $this->attributes['id_sede_scope'] ?? null;
+    }
+
+    public function setSedeIdAttribute($value)
+    {
+        $this->attributes['id_sede_scope'] = $value;
     }
 
     /**
@@ -145,6 +165,16 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsTo(Persona::class, 'id_persona', 'id');
     }
 
+    public function individualPermissions()
+    {
+        return $this->belongsToMany(Permission::class, 'user_has_permissions', 'user_id', 'permission_id');
+    }
+
+    public function permissions()
+    {
+        return $this->belongsToMany(Permission::class, 'user_has_permissions', 'user_id', 'permission_id');
+    }
+
     public function postulante()
     {
         return $this->hasOne(Postulante::class);
@@ -152,9 +182,26 @@ class User extends Authenticatable implements JWTSubject
 
     public function isAdminUser(): bool
     {
-        $roleName = strtoupper($this->rol?->name ?? $this->rol?->nombre ?? '');
+        foreach ($this->roles as $role) {
+            $rName = strtoupper(trim($role->nombres ?? ''));
+            $sysId = (int)($role->sistema_id ?? 0);
+            if ($sysId === 2 && in_array($rName, ['ADMINISTRADOR', 'ADMIN'])) {
+                return true;
+            }
+            if ($sysId === 1 && in_array($rName, ['ADMINISTRADOR', 'ADMIN', 'SUPER ADMIN', 'SUPERADMIN', 'DIRECTOR (ENCARGADO)'])) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-        return in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'SUPERADMIN', 'ADMIN'], true);
+    public function hasSystemAccess(int $systemId = 2): bool
+    {
+        if ($this->isAdminUser()) {
+            return true;
+        }
+        return $this->roles->contains(fn($r) => (int)($r->sistema_id ?? 0) === $systemId)
+            || $this->permissions->contains(fn($p) => (int)($p->sistema_id ?? 0) === $systemId);
     }
 
     public function allowedSedeIds(): array

@@ -141,7 +141,7 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        $user = auth('api')->user() ?? $request->user();
+        $user = $request->user() ?? Auth::user() ?? auth('sanctum')->user() ?? auth('api')->user();
 
         if (!$user) {
             return response()->json([
@@ -149,7 +149,11 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $user->load(['roles', 'sede', 'persona']);
-        return response()->json(['user' => $user]);
+        $user->load(['roles.permissions', 'sede', 'persona']);
+        return response()->json([
+            'success' => true,
+            'user' => $user,
+            'data' => $user,
+        ]);
     }
 }

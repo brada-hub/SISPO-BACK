@@ -58,6 +58,15 @@ class AuthenticateSharedSanctumToken
             $user->withAccessToken($accessToken);
             $accessToken->forceFill(['last_used_at' => now()])->save();
 
+            // Verificar autorización para SISPO (excepto me y logout)
+            $path = trim($request->path(), '/');
+            $isPublicOrAuthCheck = in_array($path, ['api/me', 'api/logout', 'me', 'logout']);
+            if (!$isPublicOrAuthCheck && method_exists($user, 'hasSystemAccess') && !$user->hasSystemAccess(2)) {
+                return response()->json([
+                    'message' => 'No tienes permisos para acceder a los recursos del sistema SISPO.',
+                ], 403);
+            }
+
             Auth::shouldUse('sanctum');
             Auth::setUser($user);
             $request->attributes->set('shared_access_token', $accessToken);

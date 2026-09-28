@@ -9,7 +9,7 @@ class RolController extends Controller
 {
     public function index()
     {
-        return Rol::all();
+        return Rol::where('sistema_id', 2)->get();
     }
 
     public function store(Request $request)

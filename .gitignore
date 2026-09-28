@@ -34,4 +34,11 @@ build/
 .env.*.local
 output.json
 prod_*.json
-
+*.tmp
+*.bak
+test_*.php
+tmp_*.*
+temp_*.*
+*.txt
+!robots.txt
+composer.phar
