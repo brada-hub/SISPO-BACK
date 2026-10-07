@@ -723,8 +723,6 @@ class PortalController extends Controller
                     'sede' => $p->oferta->sede->nombre,
                     'estado' => $p->estado,
                     'fecha' => $p->fecha_postulacion,
-                    'pretension_salarial' => $p->pretension_salarial,
-                    'porque_cargo' => $p->porque_cargo,
                 ];
             })
         ]);

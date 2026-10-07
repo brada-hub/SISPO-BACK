@@ -21,18 +21,9 @@ class PostulacionController extends Controller
         $allowedConvocatorias = $this->allowedConvocatoriaIds($user);
         $allowedSedes = $this->allowedSedeIds($user);
         $query = Postulacion::with([
-            'postulante.meritos.tipoDocumento',
             'postulante.formacionesAcademicas.academicLevel',
             'postulante.formacionesAcademicas.career',
             'postulante.formacionesAcademicas.professionalArea',
-            'postulante.formacionesPostgrado',
-            'postulante.experienciasDocencia',
-            'postulante.experienciasProfesionales',
-            'postulante.capacitaciones',
-            'postulante.produccionesIntelectuales',
-            'postulante.reconocimientos',
-            'postulante.experienceSummary',
-            'postulante.trainingSummary',
             'oferta.cargo',
             'oferta.sede',
             'oferta.convocatoria',
@@ -67,6 +58,17 @@ class PostulacionController extends Controller
             $query->whereHas('oferta', function($q) use ($request) {
                 $q->where('cargo_id', $request->cargo_id);
             });
+        }
+
+        // Paginación server-side cuando se solicita
+        if ($request->boolean('paginate', false) || $request->has('page') || $request->has('per_page')) {
+            $perPage = max(1, min((int) $request->input('per_page', 25), 100));
+            return $query->orderBy('id', 'desc')->paginate($perPage);
+        }
+
+        // Límite de seguridad opcional
+        if ($request->filled('limit')) {
+            return $query->orderBy('id', 'desc')->take((int)$request->input('limit'))->get();
         }
 
         return $query->orderBy('id', 'desc')->get();
@@ -622,6 +624,151 @@ class PostulacionController extends Controller
         $postulacion->delete();
 
         return response()->json(['success' => true, 'message' => 'Postulación eliminada correctamente']);
+    }
+
+    public function adjuntarDocumento(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'tipo' => 'required|string|in:ci,cv,carta,foto,diploma,titulo,certificado_posgrado,respaldo_docencia,certificado_trabajo,certificado_capacitacion,evidencia_produccion,reconocimiento',
+            'archivo' => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'record_id' => 'nullable|integer',
+        ]);
+
+        $postulacion = Postulacion::with('postulante')->findOrFail($id);
+        $postulante = $postulacion->postulante;
+
+        if (!$postulante) {
+            return response()->json(['message' => 'Postulante no encontrado'], 404);
+        }
+
+        $file = $request->file('archivo');
+        $tipo = $validated['tipo'];
+        $path = null;
+
+        switch ($tipo) {
+            case 'ci':
+                $path = $file->store('postulantes/ci', 'public');
+                $postulante->ci_archivo_path = $path;
+                $postulante->save();
+                break;
+
+            case 'cv':
+                $path = $file->store('postulantes/cv', 'public');
+                $postulante->cv_pdf_path = $path;
+                $postulante->save();
+                break;
+
+            case 'carta':
+                $path = $file->store('postulantes/cartas', 'public');
+                $postulante->carta_postulacion_path = $path;
+                $postulante->save();
+                break;
+
+            case 'foto':
+                $path = $file->store('postulantes/fotos', 'public');
+                $postulante->foto_perfil_path = $path;
+                $postulante->save();
+                break;
+
+            case 'diploma':
+            case 'titulo':
+                $record = \App\Models\FormacionAcademica::where('postulante_id', $postulante->id)
+                    ->where('id', $validated['record_id'] ?? null)
+                    ->first();
+                if ($record) {
+                    $path = $file->store("postulantes/meritos/{$postulante->id}", 'public');
+                    if ($tipo === 'diploma') {
+                        $record->diploma_archivo_path = $path;
+                    } else {
+                        $record->titulo_archivo_path = $path;
+                    }
+                    $record->save();
+                }
+                break;
+
+            case 'certificado_posgrado':
+                $record = \App\Models\FormacionPostgrado::where('postulante_id', $postulante->id)
+                    ->where('id', $validated['record_id'] ?? null)
+                    ->first();
+                if ($record) {
+                    $path = $file->store("postulantes/meritos/{$postulante->id}", 'public');
+                    $record->certificado_archivo_path = $path;
+                    $record->save();
+                }
+                break;
+
+            case 'respaldo_docencia':
+                $record = \App\Models\ExperienciaDocencia::where('postulante_id', $postulante->id)
+                    ->where('id', $validated['record_id'] ?? null)
+                    ->first();
+                if ($record) {
+                    $path = $file->store("postulantes/meritos/{$postulante->id}", 'public');
+                    $record->respaldo_archivo_path = $path;
+                    $record->save();
+                }
+                break;
+
+            case 'certificado_trabajo':
+                $record = \App\Models\ExperienciaProfesional::where('postulante_id', $postulante->id)
+                    ->where('id', $validated['record_id'] ?? null)
+                    ->first();
+                if ($record) {
+                    $path = $file->store("postulantes/meritos/{$postulante->id}", 'public');
+                    $record->certificado_archivo_path = $path;
+                    $record->save();
+                }
+                break;
+
+            case 'certificado_capacitacion':
+                $record = \App\Models\Capacitacion::where('postulante_id', $postulante->id)
+                    ->where('id', $validated['record_id'] ?? null)
+                    ->first();
+                if ($record) {
+                    $path = $file->store("postulantes/meritos/{$postulante->id}", 'public');
+                    $record->certificado_archivo_path = $path;
+                    $record->save();
+                }
+                break;
+
+            case 'evidencia_produccion':
+                $record = \App\Models\ProduccionIntelectual::where('postulante_id', $postulante->id)
+                    ->where('id', $validated['record_id'] ?? null)
+                    ->first();
+                if ($record) {
+                    $path = $file->store("postulantes/meritos/{$postulante->id}", 'public');
+                    $record->evidencia_archivo_path = $path;
+                    $record->save();
+                }
+                break;
+
+            case 'reconocimiento':
+                $record = \App\Models\Reconocimiento::where('postulante_id', $postulante->id)
+                    ->where('id', $validated['record_id'] ?? null)
+                    ->first();
+                if ($record) {
+                    $path = $file->store("postulantes/meritos/{$postulante->id}", 'public');
+                    $record->reconocimiento_archivo_path = $path;
+                    $record->save();
+                }
+                break;
+        }
+
+        if (!$path) {
+            return response()->json(['message' => 'No se pudo guardar el archivo o no se encontró el registro destino'], 422);
+        }
+
+        // Si estaba pendiente de archivos y ya tiene CI y CV, avanzar estado automáticamente a enviada
+        if ($postulacion->estado === 'pendiente_archivos' && $postulante->ci_archivo_path && $postulante->cv_pdf_path) {
+            $postulacion->update(['estado' => 'enviada']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Documento adjuntado exitosamente al expediente.',
+            'path' => $path,
+            'tipo' => $tipo,
+            'postulante' => $postulante->fresh()
+        ]);
     }
 
     public function updateEvaluationStatus(Request $request, $id)

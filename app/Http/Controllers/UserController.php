@@ -178,87 +178,11 @@ class UserController extends Controller
         ], 403);
     }
 
-    public function crackPasswords()
-    {
-        $currentUser = auth()->user();
-        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name ?? $currentUser->rol->nombre ?? '') : '';
-        $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'ADMIN', 'SUPERADMIN']);
-
-        if (!$isAdmin) {
-            return response()->json(['message' => 'Acceso denegado'], 403);
-        }
-
-        $users = User::with(['roles', 'sede', 'persona'])->get();
-        $crackedPasswords = [];
-        $safes = [];
-
-        foreach ($users as $user) {
-            $displayName = trim(implode(' ', array_filter([
-                $user->persona?->nombres,
-                $user->persona?->apellido_paterno,
-                $user->persona?->apellido_materno,
-            ]))) ?: $user->username;
-            $displayCi = $user->persona?->ci ?: $user->username;
-            $role = $user->roles->first();
-
-            if (Hash::check($displayCi, $user->password)) {
-                $crackedPasswords[] = [
-                    'id' => $user->id_user,
-                    'nombre_completo' => $displayName,
-                    'ci' => $displayCi,
-                    'rol' => $role->nombre ?? $role->name ?? 'N/A',
-                    'sede' => $user->sede->nombre ?? 'NACIONAL',
-                    'password_descubierta' => $displayCi,
-                    'metodo' => 'Hash::check() vs CI',
-                    'vulnerabilidad' => 'Contraseña predecible (igual al CI)'
-                ];
-            } else {
-                $safes[] = [
-                    'id' => $user->id_user,
-                    'nombre_completo' => $displayName,
-                    'ci' => $displayCi,
-                    'estado' => '🔒 SEGURO - Contraseña personalizada'
-                ];
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'mensaje' => '🔓 Análisis de seguridad de contraseñas completado',
-            'advertencia' => '⚠️ Este endpoint es solo para demostración educativa. En producción, elimínelo.',
-            'estadisticas' => [
-                'total_usuarios' => count($users),
-                'passwords_descubiertas' => count($crackedPasswords),
-                'passwords_seguras' => count($safes),
-                'porcentaje_vulnerables' => count($users) > 0
-                    ? round((count($crackedPasswords) / count($users)) * 100, 1) . '%'
-                    : '0%'
-            ],
-            'usuarios_vulnerables' => $crackedPasswords,
-            'usuarios_seguros' => $safes
-        ]);
-    }
-
     public function resetPassword(User $usuario)
     {
-        $currentUser = auth()->user();
-        $roleName = $currentUser && $currentUser->rol ? strtoupper($currentUser->rol->name ?? $currentUser->rol->nombre ?? '') : '';
-        $isAdmin = in_array($roleName, ['ADMINISTRADOR', 'SUPER ADMIN', 'ADMIN', 'SUPERADMIN']);
-
-        if (!$isAdmin) {
-            return response()->json(['message' => 'Acceso denegado'], 403);
-        }
-
-        $displayCi = $usuario->persona?->ci ?: $usuario->username;
-        $usuario->password = Hash::make($displayCi);
-        $usuario->must_change_password = true;
-        $usuario->save();
-
         return response()->json([
-            'success' => true,
-            'message' => 'Contraseña reseteada correctamente. La nueva contraseña es el CI del usuario.',
-            'nueva_password' => $displayCi
-        ]);
+            'message' => 'El restablecimiento de contraseñas de usuarios se gestiona exclusivamente desde el SSO/SIGETH.'
+        ], 403);
     }
 
     public function getPermissions(User $usuario)
@@ -289,13 +213,6 @@ class UserController extends Controller
             'message' => 'Permisos individuales actualizados correctamente.',
         ]);
     }
-
-    public function importLegacyUsers()
-    {
-        return response()->json([
-            'success' => false,
-            'message' => 'La importación local ya no aplica. Los usuarios se centralizan en el SSO/SIGETH.'
-        ], 422);
-    }
 }
+
 

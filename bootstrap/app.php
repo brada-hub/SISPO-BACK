@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'shared.sanctum' => \App\Http\Middleware\AuthenticateSharedSanctumToken::class,
+            'sispo.permission' => \App\Http\Middleware\CheckSispoPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
